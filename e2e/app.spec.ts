@@ -201,21 +201,49 @@ test("JSON 백업 다운로드와 확인을 거친 복원이 실제 기록을 �
   await navigate(page, "설정 및 백업");
   page.once("dialog", async dialog => {
     expect(dialog.message()).toContain("학생 8명의 백업");
+    expect(dialog.message()).toContain("불러올 백업: 2026학년도 4학년 2반 2학기 · 학생 8명 · 관찰 12건");
     await dialog.accept();
   });
   await page.getByLabel("JSON 백업 파일 선택", { exact: true }).setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: exported });
   await expect(page.getByRole("status")).toContainText("JSON 백업을 불러왔습니다.");
+  await expect(page.getByRole('region', { name: '불러온 백업' })).toContainText('관찰 12건');
   await navigate(page, "나이스 입력 준비");
   await selectStudent(page, "강가람");
   await expect(page.getByLabel("나이스에 입력할 문장", { exact: true })).toHaveValue(backup.drafts[0].content);
   await expect(page.locator(".editor-title").getByText("반영 확인", { exact: true })).toBeVisible();
 });
 
+test('JSON 파일을 읽는 동안 추가한 기록은 복원으로 덮어쓰지 않는다', async ({ page }) => {
+  await navigate(page, '설정 및 백업');
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'JSON 백업 내려받기', exact: true }).click();
+  const file = await readFile((await (await downloaded).path())!);
+  await page.evaluate(() => {
+    const original = File.prototype.text;
+    const release = Promise.withResolvers<void>();
+    (window as unknown as { releaseBackupRead: () => void }).releaseBackupRead = release.resolve;
+    File.prototype.text = async function () { const text = await original.call(this); await release.promise; return text; };
+  });
+  await page.getByLabel('JSON 백업 파일 선택', { exact: true }).setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: file });
+  await expect(page.getByRole('button', { name: '백업 읽는 중…', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '관찰 기록 남기기', exact: true }).click();
+  const editor = page.getByRole('dialog');
+  await editor.getByLabel('관찰한 내용', { exact: true }).fill('파일 읽기 중 새로 추가한 가상 기록');
+  await editor.getByRole('button', { name: '기록 저장', exact: true }).click();
+  let confirmations = 0;
+  page.on('dialog', async dialog => { confirmations++; await dialog.accept(); });
+  await page.evaluate(() => (window as unknown as { releaseBackupRead: () => void }).releaseBackupRead());
+  await expect(page.getByRole('status')).toContainText('백업 작업 중 현재 기록이 바뀌');
+  expect(confirmations).toBe(0);
+  await navigate(page, '관찰 노트');
+  await expect(page.getByText('파일 읽기 중 새로 추가한 가상 기록', { exact: true })).toBeVisible();
+});
+
 test("손상된 JSON과 1MB 초과 파일은 기록을 교체하지 않는다", async ({ page }) => {
   await navigate(page, "설정 및 백업");
   const input = page.getByLabel("JSON 백업 파일 선택", { exact: true });
   await input.setInputFiles({ name: "broken.json", mimeType: "application/json", buffer: Buffer.from("{broken json") });
-  await expect(page.getByRole("status")).toContainText("백업 파일을 읽지 못했습니다.");
+  await expect(page.getByRole("status")).toContainText("백업 파일을 읽지 못했거나 적용하지 못했습니다.");
   await input.setInputFiles({ name: "wrong-format.json", mimeType: "application/json", buffer: Buffer.from('{"version":99}') });
   await expect(page.getByRole("status")).toContainText("지원하지 않는 백업 형식입니다.");
   await input.setInputFiles({ name: "too-large.json", mimeType: "application/json", buffer: Buffer.alloc(1024 * 1024 + 1, " ") });

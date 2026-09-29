@@ -17,6 +17,8 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const SIGN_IN_NOTICE = "로그인이 완료됐습니다. ‘내 계정’에서 기록을 저장할 수 있습니다.";
+const SIGN_OUT_NOTICE = "로그아웃했습니다. 로그인 전 체험 공간으로 돌아갑니다. 계정 기록은 다음 로그인 시 다시 열 수 있습니다.";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -31,9 +33,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resendTimes = useRef(new Map<string, number>());
 
   useEffect(() => {
+    if (notice !== SIGN_IN_NOTICE && notice !== SIGN_OUT_NOTICE) return;
+    const timer = setTimeout(() => setNotice(""), 4500);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
     mounted.current = true;
     let alive = true;
     let authRevision = 0;
+    let initialCheckComplete = false;
+    let currentUserId: string | null = null;
     const incomingCallback = hasAuthCallback(window.location.href);
     const callbackError = authCallbackError(window.location.href);
     if (callbackError) {
@@ -49,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const applyUser = (nextUser: User | null) => {
       if (!alive) return;
+      currentUserId = nextUser?.id ?? null;
       setUser(nextUser);
       setChecking(false);
       if (nextUser) {
@@ -60,8 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Keep notifications synchronous; initial network validation runs separately below.
       if (!alive || event === "INITIAL_SESSION") return;
       authRevision += 1;
+      // SIGNED_IN also fires when restoring an existing session or refocusing a tab.
+      const newSignIn = event === "SIGNED_IN" && session?.user.id !== currentUserId && (initialCheckComplete || incomingCallback);
       applyUser(session?.user ?? null);
-      if (event === "SIGNED_IN") setNotice("로그인이 완료됐습니다. ‘내 계정’에서 기록을 저장할 수 있습니다.");
+      if (newSignIn) setNotice(SIGN_IN_NOTICE);
     });
     const initialRevision = authRevision;
     const reportFailure = (error: unknown) => {
@@ -93,6 +106,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (authRevision !== initialRevision) return;
         applyUser(null);
         reportFailure(error);
+      } finally {
+        initialCheckComplete = true;
       }
     })();
     return () => {
@@ -120,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { error } = await client.auth.signOut({ scope: "local" });
       if (error) throw error;
-      if (mounted.current) setNotice("로그아웃했습니다. 로그인 전 체험 공간으로 돌아갑니다. 계정 기록은 다음 로그인 시 다시 열 수 있습니다.");
+      if (mounted.current) setNotice(SIGN_OUT_NOTICE);
     } catch (error) {
       if (mounted.current) setNotice(authErrorMessage(error, "signout"));
     } finally {

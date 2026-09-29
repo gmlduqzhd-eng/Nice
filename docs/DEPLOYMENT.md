@@ -1,5 +1,15 @@
 # 배포와 이후 수정
 
+## v0.4.2 배포 구성 (2026-09-30)
+
+재방문 시 반복되는 로그인 안내를 수정하고 성공 안내를 4.5초 후 닫는다. 수동 백업은 기존 `teacher_workspaces`의 `updated_at`을 조건으로 저장해 조회 이후의 다른 기기 변경을 보호한다. 백업·파일 읽기 도중 생긴 현재 기록 변경을 확인한 뒤 복원하며, 복원 전후에 학급·자료 수를 보여 준다.
+
+DB 스키마·RLS·환경변수·인증 공급자 설정 변경은 필요하지 않다. 웹앱을 새로고침하면 적용되며 이미 열어 둔 다른 기기도 새로고침해야 새 저장 보호를 사용한다. 확장은 버전 표시만 0.4.2로 맞추며 권한·입력 동작은 그대로다. 검증한 범위와 실제 계정 확인의 한계는 [검증 기록](VERIFICATION.md)에 구분한다.
+
+## 최신 인증·백업 확인 (2026-09-29 22:33 KST)
+
+운영 앱 `nicehelperys.vercel.app`의 실제 Google 로그인과 가상 자료 수동 저장·같은 Chrome 브라우저 복원을 확인했다. 별도 배포·인증 설정·DB 스키마 변경은 없었다. 다른 브라우저의 불러오기 성공 안내는 사용자가 확인했다. 복원 원문 직접 대조, 다른 PC 확인, 로그아웃 후 재로그인, 실제 두 계정의 접근 격리와 이메일 인증은 아직 미검증이다. 아래 버전별 배포 이력의 미검증 표시는 당시 상태이며 현재 범위는 [검증 기록](VERIFICATION.md)을 기준으로 한다.
+
 ## v0.4.1 지정 오류 개선 구성
 
 선택값·기대값 표시, 가상 연습 화면 항목 자동 지정, 웹 연습 도우미 실행 버튼을 추가한다. 패키징은 ZIP 외에도 동일한 `core.js`/`content.js`를 `public/neis-helper/`에 복사한다. 두 산출물은 빌드 시 생성하며 Git에서는 제외한다. 운영 경로 `/neis-practice`에서만 웹 실행과 자동 지정을 제공한다. DB·인증·환경변수 변경은 없다.
@@ -72,7 +82,7 @@ GitHub는 코드를 보관하고 Vercel이 웹앱을 배포합니다. Supabase�
 
 공개 환경변수는 빌드 때 브라우저 번들에 들어가므로 값 변경 후 다시 배포합니다. `service_role`·비밀 키를 `NEXT_PUBLIC_` 변수에 넣지 않습니다. 실제 키, `.env.local`, `.vercel/`은 Git에 넣지 않습니다. 나이스 `NEIS_API_KEY`는 아직 설정하지 않았습니다.
 
-Google 로그인은 GIS 공식 버튼의 ID token을 Supabase에 전달하도록 구현했습니다. Supabase에 공개 Client ID를 등록하고 Secret은 빈값으로 저장했으며, 공개 Auth 설정에서 Google 활성화를 확인했습니다. 운영 앱 origin도 Google 웹 클라이언트에 등록했습니다. 운영 환경의 공개 Client ID와 `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true`를 반영한 커밋 `d4bd638` 배포가 `nice_helper_ys`에서 Ready인 것을 확인했고, 앱에서 공식 한국어 버튼을 확인했습니다. `/privacy`와 `/terms`도 무인증 HTTP 200 및 제목을 확인했습니다. Google Audience는 **Production 전환 완료** 상태입니다. 인증 센터는 기본 인증 범위에 데이터 접근 심사가 필요 없다고 안내하며, 별도 브랜드 검증은 진행하지 않았습니다. Codex 내장 브라우저에서 Google 버튼 클릭 후 FedCM 토큰 수신 오류가 관측됐으나 원인은 확정하지 않았습니다. **일반 브라우저의 실제 계정 인증·원격 백업 검증은 남아 있습니다.** 이전 Chrome 연결 중단 이력과 현재 관측은 [Google 로그인 안내](GOOGLE_AUTH.md)에 구분해 기록했습니다.
+Google 로그인은 GIS 공식 버튼의 ID token을 Supabase에 전달하도록 구현했습니다. Supabase에 공개 Client ID를 등록하고 Secret은 빈값으로 저장했으며, 공개 Auth 설정에서 Google 활성화를 확인했습니다. 운영 앱 origin도 Google 웹 클라이언트에 등록했습니다. 운영 환경의 공개 Client ID와 `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true`를 반영한 커밋 `d4bd638` 배포가 `nice_helper_ys`에서 Ready인 것을 확인했고, 앱에서 공식 한국어 버튼을 확인했습니다. `/privacy`와 `/terms`도 무인증 HTTP 200 및 제목을 확인했습니다. Google Audience는 **Production 전환 완료** 상태입니다. 인증 센터는 기본 인증 범위에 데이터 접근 심사가 필요 없다고 안내하며, 별도 브랜드 검증은 진행하지 않았습니다. **일반 Chrome의 실제 계정 인증·가상 자료 원격 저장·같은 브라우저 복원을 확인했습니다.** 다른 브라우저의 불러오기 성공 안내는 사용자 확인이며, 복원 원문 직접 대조·다른 PC 확인과 두 실제 계정의 접근 격리는 남아 있습니다. 이전 Chrome 연결 중단과 Codex 내장 브라우저의 FedCM 오류 관측은 [Google 로그인 안내](GOOGLE_AUTH.md)에 구분해 기록했습니다.
 
 GIS 앱에는 공개 `NEXT_PUBLIC_GOOGLE_CLIENT_ID`와 표시 플래그 `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED`를 환경별로 설정합니다. Client ID는 공개 앱 식별자이며 Client Secret은 이 흐름에 필요하지 않습니다. 예제 플래그는 기본 `false`이고 대상 빌드에서 `true`로 바꿉니다. 미리보기의 정확한 origin도 Google Authorized JavaScript origins에 등록해야 합니다. 환경변수 저장 후 다시 배포하고, 모의 검증과 실제 계정 선택·인증·수동 백업 검증 결과를 구분해 기록합니다. [Google 설정과 확인 절차](GOOGLE_AUTH.md)
 
@@ -106,4 +116,4 @@ git push origin main
 
 `supabase/schema.sql`은 2026-09-29 대시보드 SQL Editor에서 적용한 스키마 정의입니다. Supabase CLI 마이그레이션 이력은 만들지 않았습니다. 웹앱 푸시·배포는 이 SQL을 자동 실행하지 않으며, 현재 DB에 그대로 다시 실행하지 않습니다. 다음 DB 변경은 실제 스키마와 차이를 확인한 뒤 별도 변경 파일과 적용·접근 검증 기록으로 관리합니다.
 
-소유자 CRUD, 다른 사용자 접근 차단, 익명 권한, 데이터 제약조건을 SQL 트랜잭션으로 검증했고 테스트 데이터는 롤백했습니다. 실제 익명 REST 요청도 거부되었습니다. 재현용 SQL은 [`supabase/tests/rls-verification.sql`](../supabase/tests/rls-verification.sql)에 있으며 실행 전 적용 대상과 트랜잭션 롤백을 확인합니다. Google 또는 이메일의 실제 로그인 → 가상 기록 수동 저장 → 로그아웃·재로그인 → 불러오기와 두 실제 로그인 세션의 접근 격리는 남아 있습니다. 기본 SMTP의 팀원 대상 전송 제한은 GIS 연결과 별개로 유지됩니다. 자세한 결과는 [검증 기록](VERIFICATION.md), 연결 절차는 [연동 안내](INTEGRATIONS.md)와 [Google 로그인 안내](GOOGLE_AUTH.md)를 참고하세요.
+소유자 CRUD, 다른 사용자 접근 차단, 익명 권한, 데이터 제약조건을 SQL 트랜잭션으로 검증했고 테스트 데이터는 롤백했습니다. 실제 익명 REST 요청도 거부되었습니다. 재현용 SQL은 [`supabase/tests/rls-verification.sql`](../supabase/tests/rls-verification.sql)에 있으며 실행 전 적용 대상과 트랜잭션 롤백을 확인합니다. Google 로그인 세션의 가상 자료 수동 저장·같은 브라우저 복원은 확인했습니다. 로그아웃·재로그인, 독립 브라우저의 복원 내용 직접 대조와 두 실제 로그인 세션의 접근 격리는 남아 있습니다. 이메일 인증과 기본 SMTP의 팀원 대상 전송 제한은 GIS 연결과 별개로 유지됩니다. 자세한 결과는 [검증 기록](VERIFICATION.md), 연결 절차는 [연동 안내](INTEGRATIONS.md)와 [Google 로그인 안내](GOOGLE_AUTH.md)를 참고하세요.

@@ -1,6 +1,6 @@
 {
   "name": "damim-assistant",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "scripts": {
     "dev": "node scripts/package-neis-helper.mjs && next dev --hostname 127.0.0.1",
