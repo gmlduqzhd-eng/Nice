@@ -26,7 +26,7 @@
 2. ‘나이스 입력 준비’에서 근거를 고르고 문장을 다듬은 뒤 검토·복사합니다. 나이스 화면에서 저장한 내용을 직접 확인한 다음 반영 확인을 누릅니다.
 3. 기록은 현재 브라우저에 저장됩니다. 필요한 자료는 ‘설정 및 백업’에서 파일로 보관하고, 계정 백업은 로그인 후 직접 저장 버튼을 누릅니다.
 
-**현재 이메일 로그인은 Supabase 조직 팀원 이메일을 사용하는 테스트 계정에 제한됩니다.** 일반 교사 대상 이메일 가입을 열려면 별도 SMTP 연결이 필요합니다. 현재 무료 프로젝트는 기본 메일 템플릿도 수정할 수 없어 인증번호 입력 방식 대신 기본 로그인 링크 방식을 사용합니다. Google 로그인 코드는 준비되어 있지만 공급자를 설정하지 않아 버튼은 꺼져 있습니다. 실제 메일 수신·로그인 및 로그인한 사용자의 원격 백업은 아직 검증하지 않았습니다. [연동 상태와 절차](docs/INTEGRATIONS.md)
+**현재 이메일 로그인은 Supabase 조직 팀원 이메일을 사용하는 테스트 계정에 제한됩니다.** 일반 교사 대상 이메일 가입을 열려면 별도 SMTP 연결이 필요합니다. 현재 무료 프로젝트는 기본 메일 템플릿도 수정할 수 없어 인증번호 입력 방식 대신 기본 로그인 링크 방식을 사용합니다. Google은 Supabase에 공개 Client ID를 등록하고 공급자 활성화를 확인했으며, 앱을 Google Identity Services(GIS)의 ID token 방식으로 전환·배포 중입니다. 이 방식은 Client Secret을 사용하지 않습니다. Google 앱 게시 상태는 Testing이며, 새 운영 빌드의 버튼 표시·실제 Google 로그인·원격 백업은 아직 검증하지 않았습니다. 실제 메일 로그인도 미검증입니다. [Google 설정과 남은 검증](docs/GOOGLE_AUTH.md) · [연동 상태와 절차](docs/INTEGRATIONS.md)
 
 ## 실행
 
@@ -57,9 +57,10 @@ pnpm start
 | `NEIS_API_KEY` | 서버에서만 사용하는 나이스 공개 API 인증키 |
 | `NEXT_PUBLIC_SUPABASE_URL` | 사용할 Supabase 프로젝트 URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_`로 시작하는 공개 키 |
-| `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED` | 기본값 `false`. Google 공급자를 준비·검증한 뒤에만 `true`로 변경 |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | GIS용 공개 웹 Client ID. Supabase Google 공급자에 등록한 값과 일치 |
+| `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED` | 기본값 `false`. 공급자·origin 설정 후 대상 빌드에서 `true`로 바꾸고 실제 로그인 검증 |
 
-Supabase 비밀 키나 service-role 키는 입력하지 않습니다. 구체적인 연결·SQL·인증 URL 설정은 [연동 안내](docs/INTEGRATIONS.md)를 참고하세요.
+Supabase 비밀 키나 service-role 키는 입력하지 않습니다. Google의 공개 Client ID는 브라우저 앱 식별자이며, Client Secret이나 사용자 토큰을 공개 환경변수에 넣지 않습니다. 구체적인 연결·SQL·인증 URL 설정은 [연동 안내](docs/INTEGRATIONS.md), GIS 설정은 [Google 로그인 안내](docs/GOOGLE_AUTH.md)를 참고하세요.
 
 **2026-09-29 연결 상태:** GitHub `main`을 Vercel `nice_helper_ys`에 연결해 배포했고, Supabase `Nice` 프로젝트의 URL·공개 키 및 인증 반환 주소를 설정했습니다. `supabase/schema.sql`은 대시보드 SQL Editor에서 적용했으며 마이그레이션 이력 파일은 아닙니다. SQL 트랜잭션에서 소유자·타 사용자·익명 접근과 제약조건을 검증했고, 실제 익명 REST 요청의 접근 거부도 확인했습니다. **이메일 링크 로그인 → 브라우저 저장·불러오기는 아직 검증하지 않았습니다.** 나이스 운영 인증키도 미설정입니다. [검증 기록](docs/VERIFICATION.md)
 
@@ -69,7 +70,7 @@ Supabase 비밀 키나 service-role 키는 입력하지 않습니다. 구체적�
 2. 프레임워크를 Next.js로 설정합니다. Node.js는 `package.json`의 `24.x`를 사용하며, `vercel.json`은 서울 리전 `icn1`을 지정합니다.
 3. Vercel 프로젝트의 미리보기·운영 환경변수에 `ENABLE_EXPERIMENTAL_COREPACK=1`을 등록합니다. Corepack이 `package.json`의 `packageManager`에 고정된 pnpm 11.19.0을 사용하도록 하는 필수 빌드 설정입니다. Install Command는 기본 자동 설정을 유지합니다. [Vercel Corepack 설정](https://vercel.com/docs/builds/configure-a-build#corepack)
 4. 필요한 앱 환경변수만 개발·미리보기·운영 환경에 구분해 등록합니다.
-5. Supabase 로그인 Redirect URLs에 실제 배포 주소를 등록합니다.
+5. Supabase 로그인 Redirect URLs에 실제 배포 주소를 등록합니다. GIS 로그인은 Google 웹 클라이언트의 Authorized JavaScript origins에 해당 배포의 정확한 origin도 등록합니다.
 6. 가상 데이터로 연결을 검증한 미리보기부터 확인합니다.
 
 현재 배포는 기존 Vercel·Supabase 프로젝트를 사용합니다. 이후 `main` 변경은 GitHub 연결을 통해 자동 배포됩니다. 같은 저장소에 연결된 다른 Vercel 프로젝트 `nice_helper`도 있으므로 배포 대상을 구분합니다. 상세 연결 현황과 수정 절차는 [배포 안내](docs/DEPLOYMENT.md)에 기록했습니다. 개인정보 실사용은 학교의 운영·위탁·보유기간·접근권한 조건을 확인한 후 별도 단계로 진행합니다.
@@ -93,7 +94,7 @@ Supabase 비밀 키나 service-role 키는 입력하지 않습니다. 구체적�
 | `supabase/schema.sql` | 2026-09-29 대시보드에서 적용한 백업 테이블 스키마. 마이그레이션 이력 아님 |
 | `docs/PRODUCT.md` | 범위·다음 개발 순서·수용 기준 |
 | `docs/DEPLOYMENT.md` | 연결된 프로젝트·배포 현황·Git 수정 흐름 |
-| `docs/GOOGLE_AUTH.md` | 현재 꺼져 있는 Google 로그인 준비·검증 절차 |
+| `docs/GOOGLE_AUTH.md` | GIS 로그인 설정·현재 상태·실제 인증 검증 절차 |
 
 데이터 형식은 `version: 1`입니다. 저장 구조를 변경할 때는 이전 백업을 읽는 변환 로직을 함께 작성합니다. 나이스 양식·기재 기준은 실물 예시를 확인한 뒤 추가하며, 현재 점검 결과는 공식 학생부 적합성 판정이 아닙니다.
 

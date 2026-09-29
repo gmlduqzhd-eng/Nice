@@ -5,12 +5,16 @@
 .icon{display:grid;place-items:center;width:54px;height:54px;margin:0 0 22px;border-radius:16px;background:#edf2ff;color:#315af0}
 .eyebrow{font-size:11px;letter-spacing:.5px;color:#65769a;margin-bottom:6px;font-weight:600}
 .dialog h2{font-size:25px;letter-spacing:-1px}
+.dialog h2:focus{outline:none}
 .description{margin:9px 0 24px;color:#627087;line-height:1.8;font-size:13px}
 .availability{margin:0 0 18px;padding:10px 12px;background:#f3f6fc;color:#60718c;border-radius:8px;font-size:11px;line-height:1.8}
 .form{display:flex;flex-direction:column;gap:15px}
 .form input{font-size:15px;padding:12px 13px;min-height:46px}
 .fullWidth{width:100%;min-height:45px;font-size:13px}
 .divider{font-size:11px;text-align:center;color:#7a8598}
+.googleSignIn{display:flex;flex-direction:column;gap:10px}
+.googleButton{min-height:44px;width:100%}
+.googleButton[inert]{pointer-events:none;opacity:.6}
 .hint{font-size:11px;line-height:1.8;color:#758097}
 .notice{padding:12px 14px;margin-top:15px;border:1px solid #eadab3;border-radius:8px;background:#fff9ed;color:#795d23;font-size:12px;line-height:1.8;overflow-wrap:anywhere}
 .footer{border-top:1px solid #e8edf5;margin-top:25px;padding-top:19px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px}

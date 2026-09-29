@@ -1,6 +1,6 @@
 # 배포와 이후 수정
 
-2026-09-29 기준으로 가상 데이터 시제품을 기존 GitHub·Vercel·Supabase 프로젝트에 연결했습니다. [배포된 앱](https://nicehelperys.vercel.app)에서 기본 화면을 사용할 수 있습니다. 이메일 로그인과 로그인 후 클라우드 저장·불러오기는 아직 검증하지 않았습니다.
+2026-09-29 기준으로 가상 데이터 시제품을 기존 GitHub·Vercel·Supabase 프로젝트에 연결했습니다. [배포된 앱](https://nicehelperys.vercel.app)에서 기본 화면을 사용할 수 있습니다. Google·이메일의 실제 로그인과 로그인 후 클라우드 저장·불러오기는 아직 검증하지 않았습니다. Google 공급자는 활성화했고 GIS 방식으로 앱을 전환·배포 중입니다.
 
 ## 연결 대상
 
@@ -26,7 +26,7 @@ flowchart TD
     B --> C[Vercel nice_helper_ys 자동 빌드]
     C --> D[담임노트 웹앱]
     D --> E[브라우저 로컬 연습 기록]
-    D --> F[Supabase 이메일 인증]
+    D --> F[Supabase 인증]
     F --> G[사용자가 선택한 수동 저장·불러오기]
     G --> H[teacher_workspaces 소유자 전용 RLS]
     D --> I[서버의 나이스 공개정보 API 경로]
@@ -47,6 +47,10 @@ GitHub는 코드를 보관하고 Vercel이 웹앱을 배포합니다. Supabase�
 빌드 로그에서 Corepack과 고정된 pnpm·Next.js 버전을 확인했습니다. 개발 도구 `agent-browser`의 Chrome 미설치 경고가 있었지만 앱 빌드와 배포는 성공했습니다. 서버에서 브라우저 검증을 추가할 때는 별도의 Chrome 환경이 필요합니다.
 
 공개 환경변수는 빌드 때 브라우저 번들에 들어가므로 값 변경 후 다시 배포합니다. `service_role`·비밀 키를 `NEXT_PUBLIC_` 변수에 넣지 않습니다. 실제 키, `.env.local`, `.vercel/`은 Git에 넣지 않습니다. 나이스 `NEIS_API_KEY`는 아직 설정하지 않았습니다.
+
+Google 로그인은 GIS 공식 버튼의 ID token을 Supabase에 전달하는 방식으로 전환 중입니다. Supabase에 공개 Client ID를 등록하고 Secret은 빈값으로 저장했으며, 공개 Auth 설정에서 Google 활성화를 확인했습니다. 운영 앱 origin도 Google 웹 클라이언트에 등록했습니다. **새 운영 빌드의 Google 버튼 표시·실제 인증·원격 백업은 아직 검증 전입니다.** Google Cloud 앱은 현재 Testing 상태입니다.
+
+GIS 앱에는 공개 `NEXT_PUBLIC_GOOGLE_CLIENT_ID`와 표시 플래그 `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED`를 환경별로 설정합니다. Client ID는 공개 앱 식별자이며 Client Secret은 이 흐름에 필요하지 않습니다. 예제 플래그는 기본 `false`이고 대상 빌드에서 `true`로 바꿉니다. 미리보기의 정확한 origin도 Google Authorized JavaScript origins에 등록해야 합니다. 환경변수 저장 후 다시 배포하고, 모의 검증과 실제 계정 선택·인증·수동 백업 검증 결과를 구분해 기록합니다. [Google 설정과 확인 절차](GOOGLE_AUTH.md)
 
 로컬에는 Supabase 공개 설정을 담은 `.env.local`과 Vercel 연결 메타데이터 `.vercel/project.json`을 작성했으며 둘 다 Git에서 제외됩니다. 커밋 작성자 설정은 이 저장소 범위에만 저장했으며 전역 Git 설정은 변경하지 않았습니다. 새 컴퓨터에서 저장소를 복제하면 이 로컬 설정을 별도로 준비해야 합니다.
 
@@ -78,4 +82,4 @@ git push origin main
 
 `supabase/schema.sql`은 2026-09-29 대시보드 SQL Editor에서 적용한 스키마 정의입니다. Supabase CLI 마이그레이션 이력은 만들지 않았습니다. 웹앱 푸시·배포는 이 SQL을 자동 실행하지 않으며, 현재 DB에 그대로 다시 실행하지 않습니다. 다음 DB 변경은 실제 스키마와 차이를 확인한 뒤 별도 변경 파일과 적용·접근 검증 기록으로 관리합니다.
 
-소유자 CRUD, 다른 사용자 접근 차단, 익명 권한, 데이터 제약조건을 SQL 트랜잭션으로 검증했고 테스트 데이터는 롤백했습니다. 실제 익명 REST 요청도 거부되었습니다. 재현용 SQL은 [`supabase/tests/rls-verification.sql`](../supabase/tests/rls-verification.sql)에 있으며 실행 전 적용 대상과 트랜잭션 롤백을 확인합니다. 이메일 링크 로그인 → 가상 기록 수동 저장 → 로그아웃·재로그인 → 불러오기와 두 실제 로그인 세션의 접근 격리는 남아 있습니다. 기본 SMTP의 팀원 대상 전송 제한과 실제 사용자용 메일 설정도 함께 확인합니다. 자세한 결과는 [검증 기록](VERIFICATION.md), 연결 절차는 [연동 안내](INTEGRATIONS.md)를 참고하세요.
+소유자 CRUD, 다른 사용자 접근 차단, 익명 권한, 데이터 제약조건을 SQL 트랜잭션으로 검증했고 테스트 데이터는 롤백했습니다. 실제 익명 REST 요청도 거부되었습니다. 재현용 SQL은 [`supabase/tests/rls-verification.sql`](../supabase/tests/rls-verification.sql)에 있으며 실행 전 적용 대상과 트랜잭션 롤백을 확인합니다. Google 또는 이메일의 실제 로그인 → 가상 기록 수동 저장 → 로그아웃·재로그인 → 불러오기와 두 실제 로그인 세션의 접근 격리는 남아 있습니다. 기본 SMTP의 팀원 대상 전송 제한은 GIS 연결과 별개로 유지됩니다. 자세한 결과는 [검증 기록](VERIFICATION.md), 연결 절차는 [연동 안내](INTEGRATIONS.md)와 [Google 로그인 안내](GOOGLE_AUTH.md)를 참고하세요.

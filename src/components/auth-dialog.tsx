@@ -4,9 +4,9 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, ArrowRight, Check, Mail, UserRound, X } from "lucide-react";
 import { AUTH_RESEND_SECONDS, authErrorMessage, secondsUntil, validEmail } from "@/lib/auth";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
+import { googleAuthEnabled } from "@/lib/google-auth";
+import GoogleSignIn from "./google-sign-in";
 import styles from "./auth-dialog.module.css";
-
-const googleAuthEnabled = process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === "true";
 
 type Props = {
   initialMessage: string;
@@ -16,7 +16,7 @@ type Props = {
 
 export default function AuthDialog({ initialMessage, onClose, resendTimes }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const googleButtonRef = useRef<HTMLButtonElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const editingEmail = useRef(false);
   const sentHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -38,7 +38,7 @@ export default function AuthDialog({ initialMessage, onClose, resendTimes }: Pro
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     dialog?.showModal();
-    (googleAuthEnabled ? googleButtonRef.current : emailRef.current)?.focus();
+    (googleAuthEnabled ? headingRef.current : emailRef.current)?.focus();
     return () => {
       alive.current = false;
       requestRevision.current += 1;
@@ -56,7 +56,7 @@ export default function AuthDialog({ initialMessage, onClose, resendTimes }: Pro
 
   useEffect(() => {
     if (sentEmail) sentHeadingRef.current?.focus();
-    else (googleAuthEnabled && !editingEmail.current ? googleButtonRef.current : emailRef.current)?.focus();
+    else (googleAuthEnabled && !editingEmail.current ? headingRef.current : emailRef.current)?.focus();
   }, [sentEmail]);
 
   function changeEmail() {
@@ -69,23 +69,25 @@ export default function AuthDialog({ initialMessage, onClose, resendTimes }: Pro
     setNow(Date.now());
   }
 
-  async function signInWithGoogle() {
+  async function signInWithGoogle(credential: string, nonce: string) {
     const client = getSupabase();
-    if (!client || pending.current || !googleAuthEnabled) return;
+    if (!client || pending.current || !googleAuthEnabled) return false;
     const revision = ++requestRevision.current;
     const current = () => alive.current && requestRevision.current === revision;
     pending.current = true;
     setBusy(true);
     setMessage("");
     try {
-      const { data, error } = await client.auth.signInWithOAuth({
+      const { data, error } = await client.auth.signInWithIdToken({
         provider: "google",
-        options: { redirectTo: window.location.origin, skipBrowserRedirect: true },
+        token: credential,
+        nonce,
       });
-      if (error || !data.url) throw error ?? new Error("OAuth unavailable");
-      if (current()) window.location.assign(data.url);
+      if (error || !data.session) throw error ?? new Error("Google sign-in unavailable");
+      return true;
     } catch (error) {
       if (current()) setMessage(authErrorMessage(error, "oauth"));
+      return false;
     } finally {
       if (current()) {
         pending.current = false;
@@ -151,7 +153,7 @@ export default function AuthDialog({ initialMessage, onClose, resendTimes }: Pro
         <button type="button" className={styles.close} aria-label="로그인 창 닫기" onClick={onClose}><X size={20} aria-hidden="true" /></button>
         <div className={styles.icon}>{googleAuthEnabled ? <UserRound size={25} aria-hidden="true" /> : <Mail size={25} aria-hidden="true" />}</div>
         <p className={styles.eyebrow}>담임노트 계정</p>
-        <h2 id="auth-dialog-title">{googleAuthEnabled ? "간편하게 시작하기" : "이메일로 시작하기"}</h2>
+        <h2 id="auth-dialog-title" ref={headingRef} tabIndex={-1}>{googleAuthEnabled ? "간편하게 시작하기" : "이메일로 시작하기"}</h2>
         <p id="auth-dialog-description" className={styles.description}>{googleAuthEnabled ? <>Google 계정을 선택하면 시작할 수 있어요.<br />처음이라면 가입도 함께 진행해요.</> : <>비밀번호 없이, 이메일 하나로.<br />처음이라면 가입까지 한 번에 진행해요.</>}</p>
         {isSupabaseConfigured && <p className={styles.availability}>현재 이메일 로그인은 테스트 계정만 이용할 수 있어요. 로그인 없이 기록 기능을 먼저 체험해 보세요.</p>}
 
@@ -171,7 +173,7 @@ export default function AuthDialog({ initialMessage, onClose, resendTimes }: Pro
           </div>
         ) : (
           <form className={styles.form} onSubmit={requestLink}>
-            {googleAuthEnabled && <><button ref={googleButtonRef} type="button" className={`button primary ${styles.fullWidth}`} onClick={() => void signInWithGoogle()} disabled={busy}>Google로 계속하기<ArrowRight size={16} aria-hidden="true" /></button><span className={styles.divider}>또는 이메일로</span></>}
+            {googleAuthEnabled && <><GoogleSignIn disabled={busy} onCredential={signInWithGoogle} /><span className={styles.divider}>또는 이메일로</span></>}
             <label className="field" htmlFor="auth-email">이메일 주소
               <input ref={emailRef} id="auth-email" className="input" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="teacher@example.com" required maxLength={254} value={email} onChange={event => { setEmail(event.target.value); setMessage(""); setNow(Date.now()); }} disabled={busy} />
             </label>
@@ -184,6 +186,7 @@ export default function AuthDialog({ initialMessage, onClose, resendTimes }: Pro
         {message && <p className={styles.notice} role="alert">{message}</p>}
         <div className={styles.footer}>
           <p>로그인은 계정에 기록을 백업할 때 필요해요.</p>
+          <nav className="service-links" aria-label="가입 전 확인"><a href="/privacy" target="_blank" rel="noopener noreferrer">개인정보처리방침</a><a href="/terms" target="_blank" rel="noopener noreferrer">이용약관</a></nav>
           <button type="button" className={styles.textButton} onClick={onClose}>체험 계속하기 <ArrowRight size={14} aria-hidden="true" /></button>
         </div>
       </div>

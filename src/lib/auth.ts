@@ -10,6 +10,12 @@ export function validEmail(value: string): boolean {
 // Keep backend messages and URL-provided descriptions out of the interface.
 export function authErrorMessage(error: unknown, action: "send" | "oauth" | "session" | "signout" = "send"): string {
   const detail = error && typeof error === "object" ? error as AuthErrorLike : {};
+  if (action === "oauth") {
+    if (detail.status === 429 || detail.code === "over_request_rate_limit") return "로그인 요청이 잠시 많아졌습니다. 잠시 기다린 뒤 Google 버튼으로 다시 시도해 주세요.";
+    if (detail.name === "AuthRetryableFetchError" || detail.name === "TypeError") return "인터넷 연결을 확인한 뒤 Google 버튼으로 다시 시도해 주세요. 로그인 없이 체험을 계속할 수도 있습니다.";
+    if (["bad_jwt", "otp_expired", "session_not_found"].includes(String(detail.code))) return "Google 계정 확인 시간이 지나 로그인을 완료하지 못했습니다. Google 버튼으로 다시 시도해 주세요.";
+    return "Google 로그인을 완료하지 못했습니다. 다시 시도하거나 로그인 없이 체험을 계속해 주세요.";
+  }
   if (detail.status === 429 || ["over_email_send_rate_limit", "over_request_rate_limit"].includes(String(detail.code))) {
     return "메일 요청이 잠시 많아졌습니다. 잠시 기다린 뒤 다시 시도해 주세요.";
   }
@@ -27,7 +33,6 @@ export function authErrorMessage(error: unknown, action: "send" | "oauth" | "ses
   }
   if (action === "signout") return "로그아웃하지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.";
   if (action === "session") return "로그인 상태를 확인하지 못했습니다. 잠시 후 다시 로그인해 주세요.";
-  if (action === "oauth") return "Google 로그인을 시작하지 못했습니다. 잠시 후 다시 시도하거나 이메일로 시작해 주세요.";
   return "로그인 메일을 보내지 못했습니다. 주소와 인터넷 연결을 확인해 주세요. 계속되지 않으면 서비스 운영자에게 문의해 주세요.";
 }
 

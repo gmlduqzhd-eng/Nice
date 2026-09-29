@@ -1,40 +1,58 @@
-# Google 로그인 연결 준비
+# Google 로그인 연결과 검증
 
-현재 상태는 **Google OAuth 앱·클라이언트 생성 완료 / Supabase 인증키 입력 대기 / 운영 버튼 표시 꺼짐 / 실제 로그인 미검증**입니다. 메일 서비스나 구매한 도메인이 없어도 현재 Vercel 앱 주소와 Supabase 반환 주소를 사용해 Google 로그인을 설정할 수 있습니다. Google 동의 화면에는 Supabase 프로젝트 주소가 표시될 수 있습니다. [Supabase의 Google 설정 안내](https://supabase.com/docs/guides/auth/social-login/auth-google)
+현재 상태는 **Google 웹 Client ID 준비 / Supabase Google 공급자 활성화 확인 / GIS 방식으로 앱 전환·배포 진행 중 / 실제 로그인 미검증**입니다. 메일 발송 서비스 없이 Google 계정 선택으로 가입과 로그인을 함께 처리하는 것이 목표입니다. 공급자 설정 저장 성공은 실제 사용자 인증 성공과 구분합니다.
 
-## 2026-09-29 준비 현황
+## 사용할 인증 방식
 
-- Google Cloud 프로젝트: `My Project 36646` (`refined-graph-510101-c2`). 사용자가 만든 프로젝트를 이어서 사용합니다.
-- Google 인증 플랫폼 앱 이름: `담임노트`, 대상: 외부. 사용자 확인 후 Google API 사용자 데이터 정책에 동의하고 앱 구성을 생성했습니다.
-- 웹 OAuth 클라이언트 `담임노트 웹 로그인`을 생성했고 아래 운영 origin과 Supabase 콜백을 등록했습니다.
-- Client Secret은 저장소·문서·환경변수에 저장하지 않았습니다. 사용자가 Google 화면에서 복사해 Supabase Google 설정에 직접 입력하고 저장해야 합니다.
-- Supabase 공개 Auth 설정 조회에서 Google 비활성화를 확인했습니다. 키 저장 후 다시 확인해야 합니다.
-- Google 게시 상태는 테스트 중입니다. 일반 사용자 공개 전 브랜딩·게시 설정과 실제 로그인 동작을 확인합니다.
-- Google 버튼이 켜진 빌드와 꺼진 개발 서버에서 인증 브라우저 시나리오 각각 7개를 통과했습니다. 외부 요청은 모의 응답으로 차단했으며 실제 Google 인증 교환 검증은 아닙니다.
+Google Identity Services(GIS)의 공식 버튼이 발급한 ID token을 브라우저 callback에서 Supabase `signInWithIdToken({ provider: "google", token, nonce })`에 전달합니다. Supabase가 Google 토큰을 검증한 뒤 앱의 사용자 세션을 발급합니다. 앱은 Google 비밀번호를 받거나 토큰 내용을 직접 신뢰해 로그인 상태를 만들지 않습니다. [Supabase GIS 통합 안내](https://supabase.com/docs/guides/auth/social-login/auth-google#google-pre-built)
 
-## 사용할 주소
+이 흐름은 **공개 Client ID**를 앱과 Supabase에 설정하며 Google Client Secret을 사용하지 않습니다. Client ID는 앱 식별자이고 비밀 인증키가 아닙니다. 공식 Supabase Studio의 Google 공급자 검증 스키마는 활성 상태의 Client ID를 필수로, Secret을 선택값으로 정의합니다. Google ID token 처리 경로도 공급자 활성화 상태와 허용 Client ID, 서명·issuer·audience·nonce를 검사합니다. [Studio 설정 스키마](https://github.com/supabase/supabase/blob/master/apps/studio/components/interfaces/Auth/AuthProvidersFormValidation.tsx), [Auth ID token 처리](https://github.com/supabase/auth/blob/master/internal/api/token_oidc.go)
 
-| 설정 | 정확한 값 |
+기존 `signInWithOAuth`는 별도의 redirect·authorization code 교환 방식이며 Client Secret이 필요합니다. GIS 전환 후에는 Secret이 없는 상태에서 그 경로를 fallback으로 호출하지 않습니다. Google 로그인 가이드의 공통 설정 예시는 Secret까지 등록하지만, 이 앱에서 선택한 방식은 같은 가이드의 GIS ID token 흐름입니다.
+
+## 2026-09-29 확인한 설정과 남은 검증
+
+- Google Cloud 프로젝트: `My Project 36646` (`refined-graph-510101-c2`). 기존 프로젝트를 사용합니다.
+- Google 인증 플랫폼 앱 이름: `담임노트`, 대상: 외부, 게시 상태: `Testing`.
+- 웹 OAuth 클라이언트 `담임노트 웹 로그인`과 아래 운영 JavaScript origin을 등록했습니다.
+- Supabase Google 공급자는 **Client ID 등록·Secret 빈값**으로 저장했고 공개 Auth 설정에서 `google: true`를 확인했습니다. nonce 검사 생략은 사용하지 않습니다.
+- 앱의 GIS 전환·배포는 진행 중입니다. Vercel 운영 환경의 Client ID와 표시 플래그는 새 빌드에 반영한 뒤 확인해야 합니다. 현재 문서는 새 배포 성공이나 운영 버튼 표시를 확인한 기록이 아닙니다.
+- 실제 Google 로그인·가상 자료 원격 백업 성공은 아직 확인하지 않았습니다. Google 앱 공개 상태와 실제 인증 검증 결과를 확인한 뒤 이 절을 갱신합니다.
+- 기본 SMTP의 조직 팀원 제한은 그대로입니다. Google 설정 변경이 일반 사용자에게 이메일 로그인을 열어 주지는 않습니다.
+
+이전에 Google 버튼이 켜진 빌드와 꺼진 개발 서버에서 각각 인증 브라우저 시나리오 7개를 통과한 기록은 **기존 OAuth redirect 구현의 모의 검증**입니다. GIS 구현이나 실제 Google 인증 교환의 검증 결과로 재사용하지 않습니다. 이후 결과는 [검증 기록](VERIFICATION.md)을 확인합니다.
+
+## 주소와 환경변수
+
+| 설정 | 값·용도 |
 | --- | --- |
 | 앱 origin·Supabase Site URL | `https://nicehelperys.vercel.app` |
 | Google Authorized JavaScript origins | `https://nicehelperys.vercel.app` |
-| Google Authorized redirect URIs | `https://zskqtnweoiskgbdnraue.supabase.co/auth/v1/callback` |
-| Supabase Redirect URLs | `https://nicehelperys.vercel.app`와 `https://nicehelperys.vercel.app/` |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google 웹 클라이언트의 공개 Client ID. Supabase에 등록한 값과 일치해야 함 |
+| `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED` | 기본 `false`. 대상 환경에서 버튼을 시험·운영할 때 `true`로 빌드 |
 
-Google의 redirect URI는 Supabase 콜백이고, Supabase의 반환 허용 주소는 담임노트 앱입니다. 로컬 앱을 별도 시험하려면 `http://localhost:3000` 또는 `http://127.0.0.1:3000`을 해당 origin·Supabase 반환 허용 목록에 추가합니다. 로컬 앱이 현재 원격 Supabase 프로젝트를 사용한다면 Google 콜백은 위 원격 주소 그대로입니다.
+GIS의 popup·JavaScript callback 방식은 앱의 새 redirect endpoint가 필요하지 않습니다. 기존에 등록한 `https://zskqtnweoiskgbdnraue.supabase.co/auth/v1/callback`은 OAuth redirect용 주소이며 GIS callback의 목적지가 아닙니다. Supabase의 기존 Site URL·이메일 반환 허용 주소는 유지합니다. [Google GIS 설정](https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid)
 
-## 설정 순서
+로컬이나 미리보기에서 실제 GIS를 시험하려면 **그 환경의 정확한 origin**도 Google 웹 클라이언트에 등록해야 합니다. 운영 origin 등록은 Vercel의 다른 미리보기 주소를 자동 허용하지 않습니다. Google의 로컬 설정 안내는 `http://localhost`와 사용할 포트의 origin을 함께 추가하도록 안내합니다. 이메일 링크도 시험한다면 Supabase의 해당 반환 허용 주소를 별도로 확인합니다.
 
-1. [Google Cloud Console](https://console.cloud.google.com/)에서 사용할 프로젝트를 선택하고 Google Auth Platform의 앱 이름·지원 이메일·대상을 설정합니다. 테스트 상태라면 사용할 테스트 계정을 등록합니다.
-2. Data Access 권한은 로그인에 필요한 `openid`, 이메일, 기본 프로필로 제한합니다. Gmail·Drive·Calendar 접근이나 오프라인 접근은 담임노트 로그인에 필요하지 않습니다.
-3. Clients에서 Web application OAuth 클라이언트를 준비하고 표의 origin·redirect URI를 등록합니다.
-4. [현재 Supabase 프로젝트](https://supabase.com/dashboard/project/zskqtnweoiskgbdnraue)의 Authentication → Sign In / Providers → Google에서 Client ID와 Client Secret을 입력하고 활성화합니다. **Client Secret은 사용자가 이 설정 화면에 직접 입력합니다. 코드·GitHub·채팅·`NEXT_PUBLIC_` 환경변수에는 넣지 않습니다.** 앱에는 Google Secret이나 별도 Google Client ID 환경변수가 필요하지 않습니다.
-5. Supabase URL Configuration에서 표의 Site URL과 반환 주소를 확인합니다. 위 순서는 [공식 Google 공급자 설정](https://supabase.com/docs/guides/auth/social-login/auth-google)에 따릅니다.
+두 Google 환경변수는 빌드 때 브라우저 코드에 포함됩니다. `.env.local` 변경 시 개발 서버를 다시 시작하고, Vercel 값 변경 시 해당 환경을 다시 배포합니다. `.env.example`에는 이름과 빈값만 두며 실제 Client ID를 문서에 복제하지 않습니다. Client Secret, ID token, 액세스·갱신 토큰은 소스·로그·채팅·공개 환경변수에 넣지 않습니다.
 
-## 버튼을 켜고 확인하기
+## GIS 구현 기준
 
-현재 `.env.example`의 `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=false`를 유지합니다. 공급자 설정을 마친 뒤 신뢰하는 로컬·미리보기 환경에서만 `true`로 바꾸고 다시 빌드해 로그인 흐름을 시험합니다. 미리보기 주소를 사용하면 그 주소도 반환 허용 목록에 등록해야 합니다.
+1. 공식 `https://accounts.google.com/gsi/client` 스크립트를 로그인 UI에서 한 번 로드하고 공식 `renderButton`을 사용합니다. 한국어 표시와 popup callback 방식으로 계정 선택을 제공합니다. 자동 One Tap은 별도로 추가·검증하기 전에는 사용하지 않습니다.
+2. 인증 시도마다 암호학적으로 안전한 nonce 원문을 생성합니다. GIS에는 원문의 SHA-256 hex, Supabase에는 원문을 전달합니다. nonce 검사 생략을 켜거나 고정 nonce를 사용하지 않습니다.
+3. token callback부터 Supabase 교환 종료까지 중복 처리를 막습니다. 대화상자가 닫혔거나 시도가 바뀐 뒤 도착한 callback은 처리하지 않습니다. Google 창을 취소해도 앱이 로딩 상태에 갇히지 않아야 합니다.
+4. GIS 스크립트·교환 실패는 한국어로 안내하고 체험 기능으로 돌아갈 수 있게 합니다. 원문 오류와 토큰을 화면에 노출하지 않습니다.
+5. `use_fedcm_for_button` 등은 현재 [Google JS API](https://developers.google.com/identity/gsi/web/reference/js-reference)를 따릅니다. `use_fedcm_for_prompt`는 현재 deprecated되어 무시되므로 활성화 여부를 제어하는 값으로 사용하지 않습니다.
 
-확인할 흐름은 Google로 계속하기 → 계정 선택·동의 → 앱 복귀 → ‘내 계정’ 표시 → 명시적인 가상 자료 백업 → 로그아웃 → 재로그인·불러오기입니다. 취소·거부 후 재시도와 다른 계정 자료 접근 차단도 확인합니다. 로그인만으로 자료를 업로드해서는 안 됩니다. 테스트 결과가 확인되면 Vercel `nice_helper_ys`의 운영 환경에서 플래그를 `true`로 바꾸고 재배포합니다. 공개 환경변수는 빌드에 포함되므로 재배포가 필요합니다.
+CSP를 사용하는 경우 GIS의 script·frame·connect·style 주소와 Supabase 연결 주소를 허용해야 합니다. popup과 COOP 설정의 호환성도 확인합니다. 현재 설정을 바꿀 때는 [Google 보안 헤더 안내](https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid#content_security_policy)에 맞춰 검증합니다.
 
-문서 작성이나 환경변수 이름 추가는 공급자 연결·인증 성공을 뜻하지 않습니다. 실제 확인 결과는 [검증 기록](VERIFICATION.md)에 따로 남깁니다. 이메일 로그인은 별도 SMTP 연결 전까지 조직 팀원 제한이 유지됩니다.
+## 공개와 실제 사용자 흐름 확인
+
+Google의 기본 신원 범위인 `openid`, 이메일, 기본 프로필만 요청합니다. Gmail·Drive·Calendar 권한이나 오프라인 접근은 필요하지 않습니다. 이 범위만 요청하는 로그인은 Testing 사용자 allowlist와 7일 인증 만료 제한의 예외지만, 학교 Workspace 관리자가 외부 앱을 제한할 수 있습니다. [Google Audience 안내](https://support.google.com/cloud/answer/15549945?hl=en)
+
+공개 전에는 실제 홈페이지·개인정보처리방침·약관 URL과 브랜딩 설정을 저장하고 Audience 게시 상태를 확인합니다. 앱 공개 상태와 이름·로고를 표시하는 브랜드 검증은 구분합니다. 현재 Testing 상태를 운영 공개 완료로 표현하지 않습니다. [Google Branding 안내](https://support.google.com/cloud/answer/15549049?hl=en)
+
+대상 빌드에서 버튼 표시 → 계정 선택·동의 → 앱의 ‘내 계정’ 표시 → 명시적인 가상 자료 백업 → 로그아웃 → 재로그인·불러오기를 확인합니다. 취소·거부·네트워크 실패 후 재시도와 다른 계정 자료 접근 차단도 확인합니다. 로그인만으로 관찰 기록을 업로드해서는 안 됩니다.
+
+모의 테스트에서는 GIS 스크립트와 Supabase ID token 교환 요청을 가로채 외부로 보내지 않습니다. nonce 연결, 중복·늦은 callback, 로그인 상태 갱신을 검증합니다. 모의 테스트와 실제 Google 인증 결과를 별도로 기록합니다. 운영 환경변수를 설정하거나 Vercel 배포가 Ready여도 실제 인증 교환과 백업 검증을 완료했다고 표현하지 않습니다.

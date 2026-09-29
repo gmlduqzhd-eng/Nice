@@ -28,12 +28,12 @@ test("업무 화면과 주요 메뉴가 오류 없이 열린다", async ({ page 
     await navigate(page, menu);
   }
   const cloudWaiting = page.getByRole("button", { name: "클라우드 연결 대기", exact: true });
-  const emailStart = page.getByRole("button", { name: "이메일로 시작하기", exact: true });
-  await expect(cloudWaiting.or(emailStart)).toBeVisible();
+  const accountStart = page.getByRole("button", { name: /^(?:이메일로 시작하기|간편하게 시작하기)$/ });
+  await expect(cloudWaiting.or(accountStart)).toBeVisible();
   if (await cloudWaiting.isVisible()) {
     await expect(cloudWaiting).toBeDisabled();
   } else {
-    await expect(emailStart).toBeEnabled();
+    await expect(accountStart).toBeEnabled();
   }
   await expect(page.locator("[data-nextjs-dialog], .vite-error-overlay")).toHaveCount(0);
   expect(errors).toEqual([]);

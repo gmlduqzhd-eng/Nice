@@ -5,9 +5,8 @@ import { Cloud, Download, HardDrive, LogOut, Mail, RotateCcw, Upload, UserRound 
 import { parseWorkspace, type WorkspaceData } from "@/lib/domain";
 import { createDemoWorkspace } from "@/lib/demo";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
+import { googleAuthEnabled } from "@/lib/google-auth";
 import { useAuth } from "./auth-provider";
-
-const googleAuthEnabled = process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === "true";
 
 type Props = {
   data: WorkspaceData;

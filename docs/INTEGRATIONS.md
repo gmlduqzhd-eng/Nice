@@ -1,6 +1,6 @@
 # 외부 연결 설정과 검증
 
-이 버전은 가상 자료로 사용할 수 있는 시제품입니다. 2026-09-29 기존 Supabase `Nice` 프로젝트를 Vercel 배포본에 연결하고 백업 테이블 스키마를 적용했습니다. 데이터베이스 접근 격리와 실제 익명 REST 접근 거부는 검증했습니다. **실제 이메일 링크 로그인과 브라우저에서의 저장·불러오기는 아직 검증하지 않았으며, 나이스 인증키는 미설정입니다.** 연결 대상과 배포 절차는 [배포 안내](DEPLOYMENT.md), 확인한 범위는 [검증 기록](VERIFICATION.md)을 참고하세요.
+이 버전은 가상 자료로 사용할 수 있는 시제품입니다. 2026-09-29 기존 Supabase `Nice` 프로젝트를 Vercel 배포본에 연결하고 백업 테이블 스키마를 적용했습니다. 데이터베이스 접근 격리와 실제 익명 REST 접근 거부는 검증했습니다. **실제 Google·이메일 로그인과 브라우저에서의 저장·불러오기는 아직 검증하지 않았으며, 나이스 인증키는 미설정입니다.** 연결 대상과 배포 절차는 [배포 안내](DEPLOYMENT.md), 확인한 범위는 [검증 기록](VERIFICATION.md)을 참고하세요.
 
 ## 환경변수
 
@@ -11,12 +11,13 @@
 | `NEIS_API_KEY` | 서버 전용. 나이스 교육정보 개방 포털의 인증키 |
 | `NEXT_PUBLIC_SUPABASE_URL` | 연결할 Supabase 프로젝트 URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_`로 시작하는 공개 키 |
-| `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED` | Google 로그인 버튼 표시. 기본값 `false`이며 공급자 연결 검증 후에만 `true` |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | GIS용 공개 웹 Client ID. Supabase Google 공급자에 등록한 값과 일치 |
+| `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED` | Google 로그인 버튼 표시. 기본 `false`, 공급자·origin 준비 후 대상 빌드에서 활성화·검증 |
 | `ENABLE_EXPERIMENTAL_COREPACK` | Vercel 빌드용. 값 `1`로 고정된 pnpm 11.19.0 사용 |
 
 Vercel `nice_helper_ys`에는 Supabase URL·공개 키와 Corepack 설정을 All Environments에 등록했습니다. 로컬 `.env.local`에도 Supabase 공개 설정을 별도로 작성했으며 Git에서 제외됩니다. Vercel 등록만으로 로컬 파일이 자동 생성되지는 않습니다. 나이스 인증키는 아직 등록하지 않았습니다.
 
-Supabase `service_role`·`sb_secret_` 키는 이 앱에서 사용하지 않습니다. 공개 키 자체는 브라우저에 제공되며, 저장 자료의 접근 권한은 로그인과 데이터베이스 RLS가 제한합니다. 레거시 anon JWT는 현재 설정에서 받지 않으므로 프로젝트의 현대식 publishable key를 사용합니다.
+Supabase `service_role`·`sb_secret_` 키는 이 앱에서 사용하지 않습니다. 공개 키 자체는 브라우저에 제공되며, 저장 자료의 접근 권한은 로그인과 데이터베이스 RLS가 제한합니다. 레거시 anon JWT는 현재 설정에서 받지 않으므로 프로젝트의 현대식 publishable key를 사용합니다. Google Client ID도 공개 앱 식별자입니다. GIS 방식은 Client Secret을 사용하지 않으며 사용자 ID token·액세스·갱신 토큰을 환경변수나 로그에 저장하지 않습니다.
 
 ## 나이스 공개정보
 
@@ -65,13 +66,13 @@ type ErrorResponse = { error: string; code: string };
 
 ## Supabase 이메일 로그인
 
-현재 기본 인증은 **이메일 매직 링크**입니다. 상단 ‘회원가입 · 로그인’ 또는 계정 화면의 ‘이메일로 시작하기’를 누르면 하나의 로그인 창이 열립니다. 이메일 입력 → 로그인 링크 받기 → 메일의 링크 클릭 순서이며 비밀번호·학교·이름을 추가로 받지 않습니다. `signInWithOtp`라는 SDK 메서드에 `shouldCreateUser: true`를 전달해 처음 사용하는 주소도 같은 요청으로 가입합니다. 숫자 인증번호 입력 UI는 없습니다.
+이메일 인증 경로는 **이메일 매직 링크**입니다. 상단 ‘회원가입 · 로그인’ 또는 계정 화면에서 하나의 로그인 창을 엽니다. 이메일 입력 → 로그인 링크 받기 → 메일의 링크 클릭 순서이며 비밀번호·학교·이름을 추가로 받지 않습니다. `signInWithOtp`라는 SDK 메서드에 `shouldCreateUser: true`를 전달해 처음 사용하는 주소도 같은 요청으로 가입합니다. 숫자 인증번호 입력 UI는 없습니다.
 
 ### 현재 메일 제공 범위
 
 기존 `Nice` 프로젝트는 기본 SMTP를 사용합니다. 이 방식은 **Supabase 조직 팀원 주소에만 메일을 보낼 수 있으므로 일반 교사 누구나 이메일로 가입할 수 있는 상태가 아닙니다.** 사용자 화면에 테스트 계정 제한을 표시하며 로그인 없이 기록 기능을 체험할 수 있게 했습니다. 일반 사용자에게 메일 로그인을 제공하려면 Custom SMTP를 구성하고 발송·수신을 검증해야 합니다. 가입 사용자를 늘리려고 교사에게 Supabase 관리 조직 권한을 부여하지 않습니다. [Supabase SMTP 제한](https://supabase.com/docs/guides/auth/auth-smtp)
 
-2026-09-29 대시보드에서 메일 템플릿 수정이 잠겨 있고 Custom SMTP 연결을 요구하는 상태를 확인했습니다. 2026-06-03부터 생성된 무료 프로젝트가 기본 SMTP를 사용하면 기본 템플릿을 변경할 수 없다는 정책에 해당합니다. 따라서 현재 배포의 로그인 방식은 기본 메일 링크이며, 템플릿에 숫자 토큰을 추가했다고 가정하지 않습니다. [이메일 템플릿 정책 변경](https://supabase.com/changelog/46599-changes-to-email-template-customisation-on-free-tier)
+2026-09-29 대시보드에서 메일 템플릿 수정이 잠겨 있고 Custom SMTP 연결을 요구하는 상태를 확인했습니다. 2026-06-03부터 생성된 무료 프로젝트가 기본 SMTP를 사용하면 기본 템플릿을 변경할 수 없다는 정책에 해당합니다. 따라서 이메일 경로는 기본 메일 링크이며, 템플릿에 숫자 토큰을 추가했다고 가정하지 않습니다. [이메일 템플릿 정책 변경](https://supabase.com/changelog/46599-changes-to-email-template-customisation-on-free-tier)
 
 ### 앱 동작과 반환 주소
 
@@ -93,11 +94,13 @@ type ErrorResponse = { error: string; code: string };
 
 서버에서 인증 쿠키를 읽는 SSR 보호 경로는 이 버전에 없습니다. 초기 로그인 상태와 클라우드 저장 직전 사용자 신원은 `getUser()`로 확인하고, DB 요청은 사용자 토큰과 RLS로 검사합니다. [이메일 인증](https://supabase.com/docs/guides/auth/auth-email-passwordless), [Redirect URL 설정](https://supabase.com/docs/guides/auth/redirect-urls), [브라우저 인증 흐름](https://supabase.com/docs/guides/auth/sessions/implicit-flow)
 
-## Google 로그인 준비 상태
+## Google GIS 로그인 설정과 검증
 
-Google 버튼과 `signInWithOAuth({ provider: "google" })` 연결 코드는 준비했습니다. 추가 Google 데이터 권한이나 오프라인 접근을 요청하지 않습니다. **현재 공급자는 미설정이고 `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED`는 기본 `false`이므로 버튼을 표시하지 않습니다.** 플래그만 켜도 Google 로그인 연결이 완료되는 것은 아닙니다.
+Supabase Google 공급자에 공개 Client ID를 등록하고 Secret은 빈값으로 저장했으며 공개 Auth 설정에서 `google: true`를 확인했습니다. Google 웹 클라이언트에 운영 origin `https://nicehelperys.vercel.app`도 등록했습니다. 앱은 GIS 공식 버튼의 ID token을 `signInWithIdToken({ provider: "google", token, nonce })`으로 교환하는 방식으로 전환·배포 중입니다. 이 인증 경로는 Client Secret을 사용하지 않습니다. [Supabase GIS 안내](https://supabase.com/docs/guides/auth/social-login/auth-google#google-pre-built)
 
-설정할 때는 [Google 로그인 연결 절차](GOOGLE_AUTH.md)의 실제 origin·callback 주소를 사용합니다. OAuth Client Secret은 사용자가 Supabase의 Google 공급자 설정에 직접 입력하며 소스, 채팅, 공개 환경변수에 넣지 않습니다. 연결 후 실제 로그인·로그아웃·가상 자료 백업을 검증한 뒤 해당 배포 환경의 플래그를 켜고 다시 배포합니다.
+**Google 앱 게시 상태는 Testing이며, 새 운영 빌드의 버튼 표시·실제 계정 선택·인증·원격 백업은 아직 검증하지 않았습니다.** 환경변수 설정이나 공급자 활성화만으로 실제 로그인 성공을 판단하지 않습니다. 기존 `signInWithOAuth` redirect 방식의 모의 테스트 결과는 GIS의 검증 결과와 구분합니다.
+
+앱에는 `NEXT_PUBLIC_GOOGLE_CLIENT_ID`와 `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED`를 설정한 뒤 다시 빌드합니다. Client ID는 Supabase에 등록한 웹 클라이언트와 일치해야 하며, 실제로 사용할 origin도 Google 설정에 등록해야 합니다. GIS popup의 JavaScript callback에는 새 redirect endpoint가 필요하지 않습니다. nonce 원문은 Supabase로, SHA-256 hex는 GIS로 전달하며 nonce 검사 생략은 사용하지 않습니다. 추가 Google 데이터 권한이나 오프라인 접근은 요청하지 않습니다. 정확한 주소·공개 설정·검증 절차는 [Google 로그인 안내](GOOGLE_AUTH.md)에 기록합니다.
 
 ## 수동 저장용 스키마
 
@@ -139,9 +142,9 @@ const result = await supabase.from("teacher_workspaces")
 
 - 설정이 없는 상태에서 로컬 기록·점검·내보내기 기능이 동작하고 외부 연결은 미설정으로 표시되는지 확인합니다.
 - 나이스 인증키를 연결하고 학교 검색 결과의 학교 코드·주소, 해당 학교의 한 달 일정을 공식 포털과 대조합니다.
-- 이메일 링크로 로그인 → 수동 저장 → 로그아웃 → 재로그인 → 불러오기를 가상 데이터로 시험합니다.
+- Google 로그인과 허용된 이메일 링크 로그인을 각각 시험하고, 로그인 → 수동 저장 → 로그아웃 → 재로그인 → 불러오기를 가상 데이터로 확인합니다.
 - SQL에서 확인한 RLS 격리를 두 실제 로그인 세션의 REST 요청으로도 확인합니다. B가 A의 `user_id`를 넣은 SELECT·UPDATE·DELETE 및 소유자를 바꾸는 INSERT·UPDATE가 거절되는지 검사합니다.
 - 로그인된 각 계정은 자신의 행만 조회·수정·삭제할 수 있는지 확인합니다. 익명 REST 조회 거부는 이미 확인했으며 인증 설정 변경 시 재확인합니다.
 - Supabase Advisors로 스키마·RLS·권한을 확인합니다. 실제 학생 자료 사용 전 접근권한·보유기간·외부 처리 조건을 확정합니다.
 
-정적 코드 검사·빌드, DB 역할별 검증, 실제 이메일 인증과 브라우저 저장 검증을 구분해서 기록합니다. `supabase/schema.sql`은 이미 적용되어 있으므로 단순 배포 시 다시 실행하지 않습니다.
+정적 코드 검사·빌드, DB 역할별 검증, 모의 인증 흐름, 실제 Google·이메일 인증과 브라우저 저장 검증을 구분해서 기록합니다. `supabase/schema.sql`은 이미 적용되어 있으므로 단순 배포 시 다시 실행하지 않습니다.
