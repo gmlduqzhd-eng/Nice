@@ -21,7 +21,8 @@ type MockState = {
   googleCallbackRepeats: number;
 };
 
-async function mockSupabase(page: Page, baseURL: string) {
+async function mockSupabase(page: Page, baseURL: string, identity = TEST_USER_ID) {
+  const TEST_USER_ID = identity;
   const appOrigin = new URL(baseURL).origin;
   const now = Math.floor(Date.now() / 1000);
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -141,6 +142,42 @@ async function openAuth(page: Page) {
   return expectAuthDialog(page);
 }
 
+test("체험 공간과 두 계정의 명부는 섞이지 않고 재로그인하면 각자 복원된다", async ({ page, baseURL }) => {
+  const navigateRoster = async () => {
+    await page.getByRole("navigation", { name: "주 메뉴" }).getByRole("button", { name: "학급 · 명부", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "학급 · 명부", level: 1 })).toBeVisible();
+  };
+  const add = async (number: string, name: string) => {
+    await page.getByLabel("학생 번호", { exact: true }).fill(number);
+    await page.getByLabel("학생 이름", { exact: true }).fill(name);
+    await page.getByRole("button", { name: "학생 추가", exact: true }).click();
+    await expect(page.locator(".roster-table")).toContainText(name);
+  };
+  const logout = async () => {
+    await openSettings(page);
+    await page.getByRole("button", { name: "로그아웃", exact: true }).click();
+    await expect(page.getByRole("button", { name: "회원가입 · 로그인", exact: true })).toBeVisible();
+  };
+  await mockSupabase(page, baseURL!);
+  await page.goto("/"); await navigateRoster(); await add("9", "체험학생");
+  const a = await mockSupabase(page, baseURL!);
+  await a.completeMagicLink(); await navigateRoster();
+  await expect(page.locator(".roster-table")).not.toContainText("체험학생");
+  await add("10", "가상계정A"); await logout(); await navigateRoster();
+  await expect(page.locator(".roster-table")).toContainText("체험학생");
+  await expect(page.locator(".roster-table")).not.toContainText("가상계정A");
+  const b = await mockSupabase(page, baseURL!, "10000000-0000-4000-8000-000000000002");
+  await b.completeMagicLink(); await navigateRoster();
+  await expect(page.locator(".roster-table")).not.toContainText("체험학생");
+  await expect(page.locator(".roster-table")).not.toContainText("가상계정A");
+  await add("11", "가상계정B"); await logout();
+  const again = await mockSupabase(page, baseURL!);
+  await again.completeMagicLink(); await navigateRoster();
+  await expect(page.locator(".roster-table")).toContainText("가상계정A");
+  await expect(page.locator(".roster-table")).not.toContainText("가상계정B");
+  expect([...a.cloudRequests(), ...b.cloudRequests(), ...again.cloudRequests()]).toHaveLength(0);
+});
+
 async function expectAuthDialog(page: Page) {
   const dialog = page.getByRole("dialog", { name: AUTH_DIALOG_NAME });
   await expect(dialog).toBeVisible();
@@ -234,7 +271,7 @@ test("로그인 창은 키보드로 닫고 돌아오며 모바일에서도 가�
   expect(mock.state.unexpected).toEqual([]);
 });
 
-test("로그인 후 명시적으로 저장·불러오고 로그아웃해도 브라우저 기록을 유지한다", async ({ page, baseURL }) => {
+test("로그인 후 명시적으로 저장·불러오고 로그아웃하면 체험 공간으로 돌아간다", async ({ page, baseURL }) => {
   const mock = await mockSupabase(page, baseURL!);
   await mock.completeMagicLink();
   expect(mock.cloudRequests()).toHaveLength(0);

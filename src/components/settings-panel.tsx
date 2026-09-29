@@ -87,15 +87,15 @@ export default function SettingsPanel({ data, onReplace, onToast }: Props) {
         }
         const restored = parseWorkspace(snapshot.data);
         if (!restored) throw new Error("백업 형식 확인 필요");
-        if (!window.confirm("클라우드 백업으로 이 브라우저의 모든 연습 기록을 교체할까요? 현재 기록이 필요하면 먼저 JSON 백업을 내려받아 주세요.")) return;
+        if (!window.confirm("클라우드 백업으로 현재 기록 공간의 모든 연습 기록을 교체할까요? 현재 기록이 필요하면 먼저 JSON 백업을 내려받아 주세요.")) return;
         if (!current()) return;
         onReplace(restored);
         setCloudMessage("클라우드 백업을 이 브라우저로 불러왔습니다.");
         onToast("클라우드 백업을 불러왔습니다.");
       } else {
         const confirmation = snapshot
-          ? `이 계정에 ${savedTime(snapshot.updated_at)} 저장한 백업이 있습니다. 현재 브라우저의 연습 기록으로 덮어쓸까요?`
-          : "현재 브라우저의 연습 기록을 로그인한 계정의 클라우드에 저장할까요? 가상 학생의 연습 데이터만 저장해 주세요.";
+          ? `이 계정에 ${savedTime(snapshot.updated_at)} 저장한 백업이 있습니다. 현재 기록 공간의 연습 기록으로 덮어쓸까요?`
+          : "현재 기록 공간의 연습 기록을 로그인한 계정의 클라우드에 저장할까요? 가상 학생의 연습 데이터만 저장해 주세요.";
         if (!window.confirm(confirmation) || !current()) return;
         const updatedAt = new Date().toISOString();
         const { data: saved, error: saveError } = await client.from("teacher_workspaces")
@@ -151,7 +151,7 @@ export default function SettingsPanel({ data, onReplace, onToast }: Props) {
         onToast("지원하지 않는 백업 형식입니다. 이 앱에서 내보낸 JSON 파일을 선택해 주세요.");
         return;
       }
-      if (window.confirm(`학생 ${parsed.students.length}명의 백업으로 현재 브라우저의 연습 기록을 모두 교체할까요? 기존 기록은 먼저 백업해 주세요.`)) {
+      if (window.confirm(`학생 ${parsed.students.length}명의 백업으로 현재 기록 공간의 연습 기록을 모두 교체할까요? 기존 기록은 먼저 백업해 주세요.`)) {
         onReplace(parsed);
         onToast("JSON 백업을 불러왔습니다.");
       }
@@ -163,9 +163,13 @@ export default function SettingsPanel({ data, onReplace, onToast }: Props) {
   }
 
   function resetDemo() {
-    if (!window.confirm("이 브라우저의 모든 연습 기록을 처음 예시 데이터로 되돌릴까요? 필요한 기록은 먼저 JSON 백업으로 보관해 주세요. 클라우드 백업은 바뀌지 않습니다.")) return;
-    onReplace(createDemoWorkspace());
-    onToast("가상 학생의 예시 데이터로 초기화했습니다.");
+    if (!window.confirm("현재 기록 공간의 모든 연습 기록을 처음 예시 데이터로 되돌릴까요? 필요한 기록은 먼저 JSON 백업으로 보관해 주세요. 클라우드 백업은 바뀌지 않습니다.")) return;
+    try {
+      onReplace(createDemoWorkspace());
+      onToast("현재 기록 공간을 가상 학생의 예시 데이터로 초기화했습니다.");
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : "초기화하지 못했습니다. 저장 상태를 확인해 주세요.");
+    }
   }
 
   return (
@@ -197,7 +201,7 @@ export default function SettingsPanel({ data, onReplace, onToast }: Props) {
               <button type="button" className="button secondary" onClick={() => void syncCloud("download")} disabled={cloudBusy || importBusy || authBusy}><Download size={16} aria-hidden="true" /> 클라우드에서 불러오기</button>
             </div>
             <p className="muted">{remoteUpdatedAt ? `확인한 클라우드 저장 시각: ${savedTime(remoteUpdatedAt)}` : "클라우드 백업은 아직 조회하지 않았습니다."}</p>
-            <p className="muted">이 브라우저의 연습 기록은 계정을 바꾸거나 로그아웃해도 남아 있습니다.</p>
+            <p className="muted">계정을 바꾸면 해당 계정의 별도 기록 공간을 엽니다. 로그아웃하면 로그인 전 체험 공간으로 돌아갑니다.</p>
           </div>
         ) : (
           <div className="stack">
@@ -212,7 +216,7 @@ export default function SettingsPanel({ data, onReplace, onToast }: Props) {
         <div className="section-heading">
           <div><span className="badge"><HardDrive size={14} aria-hidden="true" /> 이 브라우저</span><h2 id="local-backup-title">연습 기록 백업</h2></div>
         </div>
-        <p className="muted">현재 기록은 이 기기의 브라우저에 저장됩니다. 브라우저 데이터를 삭제하면 사라질 수 있으니, 필요한 기록을 파일로 보관해 주세요.</p>
+        <p className="muted">현재 기록은 이 기기의 브라우저에서 로그인 계정별로 구분해 저장됩니다. 로그인 전 기록은 체험 공간에 남습니다. 체험 기록을 계정 공간으로 옮기려면 로그인 전에 JSON 백업을 내려받고 로그인 후 불러오세요. 브라우저 데이터를 삭제하면 사라질 수 있으니, 필요한 기록을 파일로 보관해 주세요.</p>
         <div className="row">
           <button type="button" className="button secondary" onClick={exportBackup}><Download size={16} aria-hidden="true" /> JSON 백업 내려받기</button>
           <button type="button" className="button secondary" onClick={() => fileInput.current?.click()} disabled={importBusy || cloudBusy}><Upload size={16} aria-hidden="true" /> {importBusy ? "백업 읽는 중…" : "JSON 백업 불러오기"}</button>
