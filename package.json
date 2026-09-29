@@ -1,10 +1,11 @@
 {
   "name": "damim-assistant",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --hostname 127.0.0.1",
-    "build": "next build",
+    "dev": "node scripts/package-neis-helper.mjs && next dev --hostname 127.0.0.1",
+    "build": "node scripts/package-neis-helper.mjs && next build",
+    "package:extension": "node scripts/package-neis-helper.mjs",
     "start": "next start --hostname 127.0.0.1",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",

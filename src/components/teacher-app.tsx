@@ -10,14 +10,16 @@ import { AuthProvider, useAuth } from './auth-provider';
 import GettingStarted from './getting-started';
 import { COPYRIGHT } from '@/lib/site';
 import ClassroomPanel from './classroom-panel';
+import NeisJobPanel from './neis-job-panel';
 import { readWorkspace, saveWorkspace, workspaceStorageKey } from '@/lib/workspace-storage';
 
-type View = 'dashboard' | 'observations' | 'workbench' | 'school' | 'settings' | 'classroom';
+type View = 'dashboard' | 'observations' | 'workbench' | 'school' | 'settings' | 'classroom' | 'neis-job';
 type SetWorkspace = (update: WorkspaceData | ((current: WorkspaceData) => WorkspaceData)) => void;
 const NAV = [
   { id: 'dashboard', label: '업무 한눈에', icon: LayoutDashboard },
   { id: 'observations', label: '관찰 노트', icon: NotebookPen },
   { id: 'workbench', label: '나이스 입력 준비', icon: ClipboardCheck },
+  { id: 'neis-job', label: '나이스 작업 도우미', icon: FileText },
   { id: 'school', label: '학교 · 학사일정', icon: School },
   { id: 'classroom', label: '학급 · 명부', icon: BookOpen },
 ] as const;
@@ -166,11 +168,12 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
           <div className="page-heading"><div><div className="eyebrow">검토부터 반영 확인까지</div><h1>나이스 입력 준비</h1><p>근거를 확인하고 문장을 정리한 뒤, 나이스에 직접 옮겨 주세요.</p></div><span className="outlined-label"><ShieldCheck size={16}/>나이스 자동 전송 없음</span></div>
           <div className="workbench-layout"><aside className="card student-list"><div className="card-heading"><h2>우리 반 학생 <span className="count-label">{data.students.length}</span></h2></div>{data.students.map(s=>{const d=data.drafts.find(d=>d.studentId===s.id);return <button key={s.id} className={`student-list-item ${selectedStudent?.id===s.id?'selected':''}`} onClick={()=>setSelected(s.id)}><Avatar number={s.number}/><span><strong>{s.name}</strong><small>{d?STATUS[d.status]:'작성 전'}</small></span>{issues.some(i=>i.studentId===s.id)?<span className="attention-dot"/>:<Check size={16}/>}</button>;})}</aside>{selectedStudent && <DraftEditor key={selectedStudent.id} data={data} studentId={selectedStudent.id} setData={setData} notify={notify} onAdd={()=>{setSelected(selectedStudent.id);setModal('new');}}/>}</div>
         </>}
+        {view === 'neis-job' && <NeisJobPanel data={data} onReview={id => { setSelected(id); navigate('workbench'); }}/>}
         {view === 'classroom' && <ClassroomPanel key={JSON.stringify(data.classroom)} data={data} onChange={setData} onToast={notify}/>}
         {view === 'school' && <><div className="page-heading"><div><div className="eyebrow">나이스 교육정보 개방 포털</div><h1>학교 · 학사일정</h1><p>학교를 검색해 공개된 학사일정을 확인하세요.</p></div></div><SchoolPanel onToast={notify}/></>}
         {view === 'settings' && <><div className="page-heading"><div><div className="eyebrow">나의 업무 공간 관리</div><h1>설정 및 백업</h1><p>내 기록을 파일로 보관하거나, 로그인한 계정에 직접 저장하세요.</p></div></div><SettingsPanel data={data} onReplace={replaceData} onToast={notify}/></>}
         </fieldset>
-        <footer className="app-footer"><div><span>담임노트 <b>·</b> 선생님의 기록에 여유를 더합니다.</span><small>{COPYRIGHT}</small></div><nav className="service-links" aria-label="서비스 안내"><a href="/privacy">개인정보처리방침</a><a href="/terms">이용약관</a></nav><details className="copyright-details"><summary>저작권 안내</summary><p>{COPYRIGHT}<br/>오픈소스 구성요소에는 각 프로젝트의 라이선스가 적용됩니다. 선생님이 직접 작성한 기록은 서비스의 저작권 표기 대상에 포함되지 않습니다.</p></details><span>v0.3 · 가상 학급 체험판</span></footer>
+        <footer className="app-footer"><div><span>담임노트 <b>·</b> 선생님의 기록에 여유를 더합니다.</span><small>{COPYRIGHT}</small></div><nav className="service-links" aria-label="서비스 안내"><a href="/privacy">개인정보처리방침</a><a href="/terms">이용약관</a></nav><details className="copyright-details"><summary>저작권 안내</summary><p>{COPYRIGHT}<br/>오픈소스 구성요소에는 각 프로젝트의 라이선스가 적용됩니다. 선생님이 직접 작성한 기록은 서비스의 저작권 표기 대상에 포함되지 않습니다.</p></details><span>v0.4 · 가상 학급 체험판</span></footer>
       </main>
     </div>
     {toast && <div role="status" className="toast"><CircleCheck size={18}/>{toast}<button aria-label="알림 닫기" onClick={()=>setToast('')}><X size={15}/></button></div>}
