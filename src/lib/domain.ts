@@ -1,0 +1,229 @@
+/** Local preparation rules, not official NEIS validation or an official byte limit. */
+export type DraftStatus = "draft" | "reviewed" | "copied" | "confirmed";
+
+export interface Student {
+  id: string;
+  number: number;
+  name: string;
+}
+
+export interface Observation {
+  id: string;
+  studentId: string;
+  date: string;
+  category: string;
+  content: string;
+}
+
+export interface Draft {
+  id: string;
+  studentId: string;
+  content: string;
+  evidenceIds: string[];
+  status: DraftStatus;
+  updatedAt: string;
+}
+
+export interface WorkspaceData {
+  version: 1;
+  students: Student[];
+  observations: Observation[];
+  drafts: Draft[];
+}
+
+export type IssueKind =
+  | "empty-draft"
+  | "no-evidence"
+  | "missing-evidence"
+  | "wrong-student-evidence"
+  | "duplicate-content"
+  | "other-student-name"
+  | "no-observations";
+
+export interface Issue {
+  id: string;
+  studentId: string;
+  draftId?: string;
+  kind: IssueKind;
+  severity: "warning" | "info";
+  title: string;
+  detail: string;
+}
+
+const DRAFT_STATUSES: DraftStatus[] = ["draft", "reviewed", "copied", "confirmed"];
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+const isText = (value: unknown, limit: number): value is string =>
+  typeof value === "string" && value.length <= limit && !value.includes("\0");
+const isId = (value: unknown): value is string =>
+  isText(value, 160) && value.length > 0 && value.trim() === value;
+const unique = (values: Array<string | number>) => new Set(values).size === values.length;
+const isDate = (value: unknown): value is string => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+const isTimestamp = (value: unknown): value is string =>
+  typeof value === "string" &&
+  /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?Z$/.test(value) &&
+  isDate(value.slice(0, 10)) && Number.isFinite(Date.parse(value));
+
+/** Validate persisted/imported JSON and return a clean, independent object. */
+export function parseWorkspace(input: unknown): WorkspaceData | null {
+  if (!isRecord(input) || input.version !== 1) return null;
+  const { students, observations, drafts } = input;
+  if (!Array.isArray(students) || students.length > 500 ||
+      !Array.isArray(observations) || observations.length > 50_000 ||
+      !Array.isArray(drafts) || drafts.length > 5_000) return null;
+
+  const cleanStudents: Student[] = [];
+  for (const item of students) {
+    if (!isRecord(item) || !isId(item.id) ||
+        typeof item.number !== "number" || !Number.isInteger(item.number) ||
+        item.number < 1 || item.number > 999 ||
+        !isText(item.name, 100) || !item.name.trim()) return null;
+    cleanStudents.push({ id: item.id, number: item.number, name: item.name });
+  }
+  if (!unique(cleanStudents.map((s) => s.id)) || !unique(cleanStudents.map((s) => s.number))) return null;
+  const studentIds = new Set(cleanStudents.map((s) => s.id));
+
+  const cleanObservations: Observation[] = [];
+  for (const item of observations) {
+    if (!isRecord(item) || !isId(item.id) || !isId(item.studentId) ||
+        !studentIds.has(item.studentId) || !isDate(item.date) ||
+        !isText(item.category, 100) || !item.category.trim() ||
+        !isText(item.content, 10_000) || !item.content.trim()) return null;
+    cleanObservations.push({
+      id: item.id, studentId: item.studentId, date: item.date,
+      category: item.category, content: item.content,
+    });
+  }
+  if (!unique(cleanObservations.map((o) => o.id))) return null;
+
+  const cleanDrafts: Draft[] = [];
+  for (const item of drafts) {
+    if (!isRecord(item) || !isId(item.id) || !isId(item.studentId) ||
+        !studentIds.has(item.studentId) || !isText(item.content, 50_000) ||
+        !Array.isArray(item.evidenceIds) || item.evidenceIds.length > 500 ||
+        !item.evidenceIds.every(isId) || !unique(item.evidenceIds) ||
+        !DRAFT_STATUSES.includes(item.status as DraftStatus) || !isTimestamp(item.updatedAt)) return null;
+    cleanDrafts.push({
+      id: item.id, studentId: item.studentId, content: item.content,
+      evidenceIds: [...item.evidenceIds], status: item.status as DraftStatus,
+      updatedAt: item.updatedAt,
+    });
+  }
+  if (!unique(cleanDrafts.map((d) => d.id))) return null;
+  const result: WorkspaceData = { version: 1, students: cleanStudents, observations: cleanObservations, drafts: cleanDrafts };
+  const evidenceIndex = new Map(cleanObservations.map((observation) => [observation.id, observation.studentId]));
+  // Draft-stage broken links remain inspectable. Completed stages must retain valid evidence.
+  if (cleanDrafts.some((draft) => draft.status !== "draft" && !canReview(result, draft, evidenceIndex))) return null;
+  return result;
+}
+
+const normalizeContent = (content: string) => content.normalize("NFC").trim().replace(/\s+/gu, " ");
+
+export function getIssues(data: WorkspaceData): Issue[] {
+  const issues: Issue[] = [];
+  const observations = new Map(data.observations.map((observation) => [observation.id, observation]));
+  const studentNames = new Map(data.students.map((student) => [student.id, student.name]));
+  const groups = new Map<string, Draft[]>();
+  for (const draft of data.drafts) {
+    const normalized = normalizeContent(draft.content);
+    if (normalized) groups.set(normalized, [...(groups.get(normalized) ?? []), draft]);
+  }
+  for (const student of data.students) {
+    if (!data.drafts.some((draft) => draft.studentId === student.id)) {
+      issues.push({ id: `empty-draft:${student.id}`, studentId: student.id, kind: "empty-draft", severity: "warning", title: "초안이 아직 없어요", detail: "관찰 기록을 확인하고 입력할 초안을 작성해 주세요." });
+    }
+    if (!data.observations.some((observation) => observation.studentId === student.id)) {
+      issues.push({ id: `no-observations:${student.id}`, studentId: student.id, kind: "no-observations", severity: "info", title: "관찰 기록이 필요해요", detail: "이 학생의 관찰 기록이 아직 없습니다. 실제 관찰한 내용을 기록해 주세요." });
+    }
+  }
+  for (const draft of data.drafts) {
+    const add = (kind: IssueKind, title: string, detail: string, severity: "warning" | "info" = "warning") => {
+      issues.push({ id: `${kind}:${draft.id}`, studentId: draft.studentId, draftId: draft.id, kind, severity, title, detail });
+    };
+    if (!draft.content.trim()) add("empty-draft", "입력할 문장이 비어 있어요", "관찰 기록을 근거로 초안을 작성한 뒤 검토해 주세요.");
+    if (!draft.evidenceIds.length) add("no-evidence", "관찰 근거가 연결되지 않았어요", "초안 내용을 뒷받침하는 이 학생의 관찰 기록을 선택해 주세요.");
+    const missing = draft.evidenceIds.filter((id) => !observations.has(id));
+    if (missing.length) add("missing-evidence", "연결한 관찰 기록을 찾을 수 없어요", `연결된 기록 ${missing.length}건이 없습니다. 근거를 다시 선택해 주세요.`);
+    const mismatched = draft.evidenceIds.filter((id) => observations.has(id) && observations.get(id)!.studentId !== draft.studentId);
+    if (mismatched.length) add("wrong-student-evidence", "다른 학생의 근거가 연결되어 있어요", "학생과 관찰 기록의 연결을 확인하고 이 학생의 근거를 선택해 주세요.");
+    const matches = (groups.get(normalizeContent(draft.content)) ?? []).filter((other) => other.studentId !== draft.studentId);
+    if (matches.length) {
+      const names = [...new Set(matches.map((other) => studentNames.get(other.studentId) ?? "알 수 없는 학생"))];
+      add("duplicate-content", "다른 학생과 같은 문장이 있어요", `${names.join(", ")} 학생의 초안과 공백 정리 후 문장이 같습니다. 개별 관찰 내용에 맞는지 검토해 주세요.`);
+    }
+    const namedStudents = data.students.filter((student) => student.id !== draft.studentId && draft.content.includes(student.name));
+    if (namedStudents.length) add("other-student-name", "다른 학생 이름이 포함되어 있어요", `${namedStudents.map((student) => student.name).join(", ")} 이름이 포함되어 있습니다. 문맥과 입력 대상을 확인해 주세요.`);
+  }
+  return issues;
+}
+
+function canReview(data: WorkspaceData, draft: Draft, evidenceIndex = new Map(data.observations.map((observation) => [observation.id, observation.studentId]))): boolean {
+  return !!draft.content.trim() && draft.evidenceIds.length > 0 && draft.evidenceIds.every((id) => evidenceIndex.get(id) === draft.studentId);
+}
+
+export function updateDraft(data: WorkspaceData, id: string, content: string, evidenceIds: string[], updatedAt = new Date().toISOString()): WorkspaceData {
+  const draft = data.drafts.find((item) => item.id === id);
+  if (!draft) throw new Error("초안을 찾을 수 없습니다.");
+  if (!isText(content, 50_000) || !Array.isArray(evidenceIds) || evidenceIds.length > 500 || !evidenceIds.every(isId) || !isTimestamp(updatedAt)) throw new Error("초안 형식이 올바르지 않습니다.");
+  const ids = [...new Set(evidenceIds)];
+  if (ids.some((evidenceId) => !data.observations.some((observation) => observation.id === evidenceId && observation.studentId === draft.studentId))) throw new Error("이 학생의 유효한 관찰 기록을 선택해 주세요.");
+  const evidenceUnchanged = ids.length === draft.evidenceIds.length && ids.every((evidenceId) => draft.evidenceIds.includes(evidenceId));
+  if (content === draft.content && evidenceUnchanged) return data;
+  return { ...data, drafts: data.drafts.map((item) => item.id === id ? { ...item, content, evidenceIds: ids, status: "draft", updatedAt } : item) };
+}
+
+export function transitionDraft(data: WorkspaceData, id: string, status: DraftStatus, options: { clipboardSucceeded?: boolean } = {}): WorkspaceData {
+  const draft = data.drafts.find((item) => item.id === id);
+  if (!draft) throw new Error("초안을 찾을 수 없습니다.");
+  if (!DRAFT_STATUSES.includes(status)) throw new Error("올바르지 않은 작업 상태입니다.");
+  if (status !== "draft" && !canReview(data, draft)) throw new Error("문장과 이 학생의 유효한 관찰 근거를 먼저 확인해 주세요.");
+  if (status === "copied" && (draft.status === "draft" || !options.clipboardSucceeded)) throw new Error("검토를 완료하고 클립보드 복사가 성공한 뒤 표시할 수 있습니다.");
+  if (status === "confirmed" && draft.status !== "copied" && draft.status !== "confirmed") throw new Error("먼저 복사한 뒤 나이스에서 반영 여부를 직접 확인해 주세요.");
+  if (draft.status === status) return data;
+  return { ...data, drafts: data.drafts.map((item) => item.id === id ? { ...item, status, updatedAt: new Date().toISOString() } : item) };
+}
+
+export function addObservation(data: WorkspaceData, observation: Observation): WorkspaceData {
+  if (data.observations.some((item) => item.id === observation.id)) throw new Error("같은 ID의 관찰 기록이 있습니다.");
+  const next = { ...data, observations: [...data.observations, { ...observation }] };
+  if (!parseWorkspace(next)) throw new Error("관찰 기록의 학생, 날짜, 분류와 내용을 확인해 주세요.");
+  return next;
+}
+
+export function editObservation(data: WorkspaceData, id: string, patch: Partial<Pick<Observation, "date" | "category" | "content">>): WorkspaceData {
+  const existing = data.observations.find((item) => item.id === id);
+  if (!existing) throw new Error("관찰 기록을 찾을 수 없습니다.");
+  const replacement = {
+    ...existing,
+    date: patch.date ?? existing.date,
+    category: patch.category ?? existing.category,
+    content: patch.content ?? existing.content,
+  };
+  if (replacement.date === existing.date && replacement.category === existing.category && replacement.content === existing.content) return data;
+  const next: WorkspaceData = {
+    ...data,
+    observations: data.observations.map((item) => item.id === id ? replacement : item),
+    drafts: data.drafts.map((draft) => draft.evidenceIds.includes(id) ? { ...draft, status: "draft", updatedAt: new Date().toISOString() } : draft),
+  };
+  if (!parseWorkspace(next)) throw new Error("관찰 기록의 날짜, 분류와 내용을 확인해 주세요.");
+  return next;
+}
+
+export function deleteObservation(data: WorkspaceData, id: string): WorkspaceData {
+  if (!data.observations.some((observation) => observation.id === id)) return data;
+  return {
+    ...data,
+    observations: data.observations.filter((observation) => observation.id !== id),
+    // Keep broken links so the teacher can identify and replace a removed source.
+    drafts: data.drafts.map((draft) => draft.evidenceIds.includes(id) ? { ...draft, status: "draft", updatedAt: new Date().toISOString() } : draft),
+  };
+}
+
+/** Informational UTF-8 size only. NEIS field limits must be verified separately. */
+export function utf8ByteLength(text: string): number {
+  return new TextEncoder().encode(text).length;
+}
