@@ -17,7 +17,7 @@
     #mapping-values{padding-left:18px;overflow-wrap:anywhere}summary{cursor:pointer}
   </style><section aria-label="담임노트 입력 도우미">
     <div class="row"><h2>담임노트 입력 도우미</h2><button id="close" aria-label="도우미 닫기">닫기</button></div>
-    <p class="muted">0.4.2 · ${webPractice ? '웹 연습' : '확장프로그램'} · 실제 나이스 호환성 미검증. 가상 자료만 사용하세요. 저장 버튼은 누르지 않으며 사이트의 입력 이벤트가 자동 저장을 실행할 수 있습니다.</p>
+    <p class="muted">0.5.0 · ${webPractice ? '웹 연습' : '확장프로그램'} · 실제 나이스 호환성 미검증. 가상 자료만 사용하세요. 저장 버튼은 누르지 않으며 사이트의 입력 이벤트가 자동 저장을 실행할 수 있습니다.</p>
     <label>작업 JSON 파일<input id="file" type="file" accept=".json,application/json"></label>
     <p id="classroom"></p><label>작업 학생<select id="student" disabled></select></label><pre id="preview"></pre>
     <p class="muted">각 ‘지정’ 버튼을 누른 뒤 화면에서 해당 값만 보이는 항목을 클릭하세요. 문장 입력칸도 따로 지정합니다. iframe·캔버스는 지원하지 않습니다.</p>

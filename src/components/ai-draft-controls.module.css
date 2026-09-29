@@ -1,0 +1,10 @@
+.panel{margin:16px 0 20px;padding:18px;border:1px solid #dce3ff;border-radius:12px;background:#f7f8ff;min-width:0}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.intro{display:flex;gap:10px;align-items:flex-start;color:#405bc0}.intro strong{font-size:14px}.intro p{font-size:12px;color:#63718a;line-height:1.8;margin:5px 0 0}
+.actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.length{display:flex;align-items:center;gap:8px;font-size:12px;color:#52627d}.length select{max-width:100%;border:1px solid #dbe3f3;border-radius:7px;background:white;padding:9px;color:#33435e;font:inherit;min-height:40px}
+.evidence{display:flex;align-items:center;gap:8px;font-size:12px;color:#4d5e7e;margin-top:14px}.evidence input{width:16px;height:16px;accent-color:#405bde}
+.help{font-size:12px;color:#62718a;line-height:1.8;margin:12px 0 0;overflow-wrap:anywhere}
+.preview{margin-top:18px;padding:18px;background:white;border:1px solid #d5dff8;border-radius:9px}.preview h3{font-size:14px}.preview>.actions{margin-top:14px}.result{font-size:14px;line-height:2;white-space:pre-wrap;overflow-wrap:anywhere;margin:16px 0;color:#263957}
+.spinner{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:520px){.panel,.preview{padding:13px}.toolbar,.toolbar>.actions{width:100%}.length{flex:1}.length select{flex:1;min-width:0}.preview :global(.row){flex-wrap:wrap}.intro p,.help{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.spinner{animation:none}}
