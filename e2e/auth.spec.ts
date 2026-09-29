@@ -4,6 +4,7 @@ import type { WorkspaceData } from "../src/lib/domain";
 // Synthetic identity only. These requests never reach Supabase or send email.
 const TEST_EMAIL = "teacher-browser-test@example.invalid";
 const TEST_USER_ID = "10000000-0000-4000-8000-000000000001";
+const AUTH_DIALOG_NAME = /^(?:이메일로 시작하기|간편하게 시작하기)$/;
 
 type ApiRequest = { method: string; path: string; body: Record<string, unknown> | null };
 type MockState = {
@@ -12,6 +13,7 @@ type MockState = {
   snapshot: { data: WorkspaceData; updated_at: string } | null;
   otpError: { status: number; code: string; message: string } | null;
   userError: { status: number; code: string; message: string } | null;
+  oauthNavigations: { url: string; isNavigation: boolean }[];
 };
 
 async function mockSupabase(page: Page, baseURL: string) {
@@ -29,7 +31,7 @@ async function mockSupabase(page: Page, baseURL: string) {
     app_metadata: { provider: "email", providers: ["email"] }, user_metadata: {},
     identities: [], created_at: "2026-09-29T00:00:00.000Z", updated_at: "2026-09-29T00:00:00.000Z",
   };
-  const state: MockState = { requests: [], unexpected: [], snapshot: null, otpError: null, userError: null };
+  const state: MockState = { requests: [], unexpected: [], snapshot: null, otpError: null, userError: null, oauthNavigations: [] };
   const callbackFragment = new URLSearchParams({
     access_token: accessToken, refresh_token: "synthetic-refresh-token-not-a-credential",
     expires_in: "3600", expires_at: String(now + 3600), token_type: "bearer", type: "magiclink",
@@ -49,6 +51,11 @@ async function mockSupabase(page: Page, baseURL: string) {
     if (url.pathname === "/auth/v1/otp" && request.method() === "POST") {
       if (state.otpError) return json({ code: state.otpError.code, msg: state.otpError.message }, state.otpError.status);
       return json({});
+    }
+    if (url.pathname === "/auth/v1/authorize" && request.method() === "GET") {
+      state.oauthNavigations.push({ url: url.toString(), isNavigation: request.isNavigationRequest() });
+      // Fulfill the external navigation locally. No request reaches Supabase or Google.
+      return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: "<!doctype html><html lang='ko'><title>모의 인증 이동</title><h1>모의 Google 로그인 이동</h1></html>" });
     }
     if (url.pathname === "/auth/v1/user" && request.method() === "GET") {
       expect(request.headers().authorization).toBe(`Bearer ${accessToken}`);
@@ -93,9 +100,14 @@ async function mockSupabase(page: Page, baseURL: string) {
 
 async function openAuth(page: Page) {
   await page.getByRole("button", { name: "회원가입 · 로그인", exact: true }).click();
-  const dialog = page.getByRole("dialog");
+  return expectAuthDialog(page);
+}
+
+async function expectAuthDialog(page: Page) {
+  const dialog = page.getByRole("dialog", { name: AUTH_DIALOG_NAME });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("heading", { name: "이메일로 시작하기", exact: true })).toBeVisible();
+  const googleEnabled = await dialog.getByRole("button", { name: "Google로 계속하기", exact: true }).isVisible();
+  await expect(dialog).toHaveAccessibleName(googleEnabled ? "간편하게 시작하기" : "이메일로 시작하기");
   return dialog;
 }
 
@@ -164,7 +176,9 @@ test("로그인 창은 키보드로 닫고 돌아오며 모바일에서도 가�
   await page.goto("/");
   const trigger = page.getByRole("button", { name: "회원가입 · 로그인", exact: true });
   const dialog = await openAuth(page);
-  await expect(dialog.getByRole("textbox", { name: "이메일 주소", exact: true })).toBeFocused();
+  const google = dialog.getByRole("button", { name: "Google로 계속하기", exact: true });
+  const initialControl = await google.isVisible() ? google : dialog.getByRole("textbox", { name: "이메일 주소", exact: true });
+  await expect(initialControl).toBeFocused();
   for (let index = 0; index < 6; index += 1) {
     await page.keyboard.press("Tab");
     // Native dialogs may hand focus to browser chrome at the tab boundary
@@ -224,8 +238,7 @@ test("로그인 후 명시적으로 저장·불러오고 로그아웃해도 브�
 test("만료된 이메일 링크는 재요청 안내를 보여주고 주소에서 인증 오류를 지운다", async ({ page, baseURL }) => {
   const mock = await mockSupabase(page, baseURL!);
   await page.goto("/#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired");
-  const dialog = page.getByRole("dialog", { name: "이메일로 시작하기", exact: true });
-  await expect(dialog).toBeVisible();
+  const dialog = await expectAuthDialog(page);
   await expect(dialog).toContainText(/만료|유효하지/);
   await expect.poll(() => new URL(page.url()).hash).toBe("");
   await expect(dialog.getByRole("button", { name: "로그인 링크 받기", exact: true })).toBeEnabled();
@@ -237,8 +250,7 @@ test("콜백 토큰 검증에 실패하면 URL 토큰을 지우고 새 로그인
   const mock = await mockSupabase(page, baseURL!);
   mock.state.userError = { status: 401, code: "bad_jwt", message: "Synthetic expired callback token detail" };
   await page.goto(`/?view=notes#tab=class&${mock.callbackFragment}`);
-  const dialog = page.getByRole("dialog", { name: "이메일로 시작하기", exact: true });
-  await expect(dialog).toBeVisible();
+  const dialog = await expectAuthDialog(page);
   await expect(dialog.getByRole("alert")).toContainText(/새 로그인 메일|다시|만료/);
   await expect(dialog.getByRole("alert")).not.toContainText("Synthetic expired callback token detail");
   await expect.poll(() => `${new URL(page.url()).search}${new URL(page.url()).hash}`).toBe("?view=notes#tab=class");
@@ -249,5 +261,37 @@ test("콜백 토큰 검증에 실패하면 URL 토큰을 지우고 새 로그인
   await dialog.getByRole("button", { name: "로그인 링크 받기", exact: true }).click();
   await expect(dialog.getByRole("heading", { name: "메일함을 확인해 주세요", exact: true })).toBeVisible();
   expect(mock.state.requests.filter(request => request.path === "/auth/v1/otp")).toHaveLength(1);
+  expect(mock.state.unexpected).toEqual([]);
+});
+
+test("Google 로그인 설정에 맞게 버튼을 표시하고 올바른 공급자 인증 주소로 이동한다", async ({ page, baseURL }) => {
+  const mock = await mockSupabase(page, baseURL!);
+  await page.goto("/");
+  const dialog = await openAuth(page);
+  const google = dialog.getByRole("button", { name: "Google로 계속하기", exact: true });
+  // Optional runner expectation also detects an incorrectly configured build.
+  if (process.env.PLAYWRIGHT_EXPECT_GOOGLE_AUTH === "true") await expect(google).toBeVisible();
+  if (process.env.PLAYWRIGHT_EXPECT_GOOGLE_AUTH === "false") await expect(google).toHaveCount(0);
+  if (!await google.isVisible()) {
+    await expect(google).toHaveCount(0);
+    await expect(dialog).toHaveAccessibleName("이메일로 시작하기");
+    expect(mock.state.oauthNavigations).toEqual([]);
+    return;
+  }
+  // Google login must work without filling the separate email form.
+  await expect(dialog.getByRole("textbox", { name: "이메일 주소", exact: true })).toHaveValue("");
+  await google.click();
+  await expect(page.getByRole("heading", { name: "모의 Google 로그인 이동", exact: true })).toBeVisible();
+  expect(mock.state.oauthNavigations).toHaveLength(1);
+  const navigation = mock.state.oauthNavigations[0];
+  const authorizeUrl = new URL(navigation.url);
+  expect(navigation.isNavigation).toBe(true);
+  expect(authorizeUrl.origin).not.toBe(new URL(baseURL!).origin);
+  expect(authorizeUrl.pathname).toBe("/auth/v1/authorize");
+  expect(authorizeUrl.searchParams.get("provider")).toBe("google");
+  expect(authorizeUrl.searchParams.get("redirect_to")).toBe(new URL(baseURL!).origin);
+  expect(page.url()).toBe(navigation.url);
+  expect(mock.state.requests.filter(request => request.path === "/auth/v1/otp")).toHaveLength(0);
+  expect(mock.cloudRequests()).toHaveLength(0);
   expect(mock.state.unexpected).toEqual([]);
 });

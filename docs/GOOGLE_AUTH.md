@@ -1,6 +1,16 @@
 # Google 로그인 연결 준비
 
-현재 상태는 **앱 코드 준비 / Google 공급자 미설정 / 버튼 표시 꺼짐 / 실제 로그인 미검증**입니다. 메일 서비스나 구매한 도메인이 없어도 현재 Vercel 앱 주소와 Supabase 반환 주소를 사용해 Google 로그인을 설정할 수 있습니다. Google 동의 화면에는 Supabase 프로젝트 주소가 표시될 수 있습니다. [Supabase의 Google 설정 안내](https://supabase.com/docs/guides/auth/social-login/auth-google)
+현재 상태는 **Google OAuth 앱·클라이언트 생성 완료 / Supabase 인증키 입력 대기 / 운영 버튼 표시 꺼짐 / 실제 로그인 미검증**입니다. 메일 서비스나 구매한 도메인이 없어도 현재 Vercel 앱 주소와 Supabase 반환 주소를 사용해 Google 로그인을 설정할 수 있습니다. Google 동의 화면에는 Supabase 프로젝트 주소가 표시될 수 있습니다. [Supabase의 Google 설정 안내](https://supabase.com/docs/guides/auth/social-login/auth-google)
+
+## 2026-09-29 준비 현황
+
+- Google Cloud 프로젝트: `My Project 36646` (`refined-graph-510101-c2`). 사용자가 만든 프로젝트를 이어서 사용합니다.
+- Google 인증 플랫폼 앱 이름: `담임노트`, 대상: 외부. 사용자 확인 후 Google API 사용자 데이터 정책에 동의하고 앱 구성을 생성했습니다.
+- 웹 OAuth 클라이언트 `담임노트 웹 로그인`을 생성했고 아래 운영 origin과 Supabase 콜백을 등록했습니다.
+- Client Secret은 저장소·문서·환경변수에 저장하지 않았습니다. 사용자가 Google 화면에서 복사해 Supabase Google 설정에 직접 입력하고 저장해야 합니다.
+- Supabase 공개 Auth 설정 조회에서 Google 비활성화를 확인했습니다. 키 저장 후 다시 확인해야 합니다.
+- Google 게시 상태는 테스트 중입니다. 일반 사용자 공개 전 브랜딩·게시 설정과 실제 로그인 동작을 확인합니다.
+- Google 버튼이 켜진 빌드와 꺼진 개발 서버에서 인증 브라우저 시나리오 각각 7개를 통과했습니다. 외부 요청은 모의 응답으로 차단했으며 실제 Google 인증 교환 검증은 아닙니다.
 
 ## 사용할 주소
 

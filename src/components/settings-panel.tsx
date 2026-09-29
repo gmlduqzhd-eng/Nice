@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { Cloud, Download, HardDrive, LogOut, Mail, RotateCcw, Upload } from "lucide-react";
+import { Cloud, Download, HardDrive, LogOut, Mail, RotateCcw, Upload, UserRound } from "lucide-react";
 import { parseWorkspace, type WorkspaceData } from "@/lib/domain";
 import { createDemoWorkspace } from "@/lib/demo";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useAuth } from "./auth-provider";
+
+const googleAuthEnabled = process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === "true";
 
 type Props = {
   data: WorkspaceData;
@@ -190,7 +192,7 @@ export default function SettingsPanel({ data, onReplace, onToast }: Props) {
           <p role="status" className="muted">로그인 상태를 확인하고 있습니다…</p>
         ) : user ? (
           <div className="stack">
-            <div className="row"><strong>{user.email ?? "이메일 로그인 계정"}</strong><button type="button" className="button secondary" onClick={signOut} disabled={authBusy || cloudBusy}><LogOut size={15} aria-hidden="true" /> {authBusy ? "처리 중…" : "로그아웃"}</button></div>
+            <div className="row"><strong>{user.email ?? "로그인 계정"}</strong><button type="button" className="button secondary" onClick={signOut} disabled={authBusy || cloudBusy}><LogOut size={15} aria-hidden="true" /> {authBusy ? "처리 중…" : "로그아웃"}</button></div>
             <div className="row">
               <button type="button" className="button primary" onClick={() => void syncCloud("upload")} disabled={cloudBusy || importBusy || authBusy}><Upload size={16} aria-hidden="true" /> {cloudBusy ? "처리 중…" : "클라우드에 저장"}</button>
               <button type="button" className="button secondary" onClick={() => void syncCloud("download")} disabled={cloudBusy || importBusy || authBusy}><Download size={16} aria-hidden="true" /> 클라우드에서 불러오기</button>
@@ -200,8 +202,8 @@ export default function SettingsPanel({ data, onReplace, onToast }: Props) {
           </div>
         ) : (
           <div className="stack">
-            <p className="muted">이메일을 입력하고 메일의 링크를 누르면 끝. 처음이라면 회원가입도 함께 진행됩니다.</p>
-            <div><button className="button primary" type="button" onClick={openAuth}><Mail size={16} aria-hidden="true" /> 이메일로 시작하기</button></div>
+            <p className="muted">{googleAuthEnabled ? "Google 계정으로 간편하게 시작하세요. 처음이라면 회원가입도 함께 진행됩니다." : "이메일을 입력하고 메일의 링크를 누르면 끝. 처음이라면 회원가입도 함께 진행됩니다."}</p>
+            <div><button className="button primary" type="button" onClick={openAuth}>{googleAuthEnabled ? <UserRound size={16} aria-hidden="true" /> : <Mail size={16} aria-hidden="true" />}{googleAuthEnabled ? "간편하게 시작하기" : "이메일로 시작하기"}</button></div>
           </div>
         )}
         {cloudMessage && <p className="notice" role="status">{cloudMessage}</p>}
