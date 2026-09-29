@@ -131,3 +131,85 @@ test('job screen fits a 390px viewport and supplies the packaged download', asyn
   const response = await request.get('/downloads/damim-neis-helper.zip');
   expect(response.ok()).toBe(true); expect((await response.body()).readUInt32LE(0)).toBe(0x04034b50);
 });
+
+test('deployed web launcher uses packaged scripts and fills through automatic practice mapping', async ({ page, request }, testInfo) => {
+  for (const name of ['core.js', 'content.js']) {
+    const response = await request.get(`/neis-helper/${name}?v=0.4.1`);
+    expect(response.ok()).toBe(true);
+    expect((await response.text()).replace(/\r\n/g, '\n')).toBe((await readFile(path.join(extension, name), 'utf8')).replace(/\r\n/g, '\n'));
+  }
+  await page.goto('/neis-practice');
+  await page.getByRole('button', { name: '웹 연습 도우미 열기', exact: true }).click();
+  await expect(panel(page).getByText(/0.4.1 · 웹 연습/)).toBeVisible();
+  await panel(page).getByLabel('작업 JSON 파일').setInputFiles({ name: 'job.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(job())) });
+  await panel(page).getByRole('button', { name: '연습 화면 항목 자동 지정' }).click();
+  await expect(panel(page).getByRole('button', { name: '대조한 빈칸에 입력' })).toBeDisabled();
+  const writes: string[] = []; page.on('request', req => { if (req.method() !== 'GET') writes.push(req.url()); });
+  await panel(page).getByRole('button', { name: '화면 대조', exact: true }).click();
+  await panel(page).getByRole('button', { name: '대조한 빈칸에 입력' }).click();
+  await expect(page.locator('#practice-content')).toHaveValue(job().rows[0].content);
+  await expect(page.getByText('현재 입력 45자', { exact: false })).toBeVisible();
+  await expect(panel(page).getByRole('status')).toContainText('저장 여부는 미확인');
+  await expect(page.getByText('아직 가상 저장하지 않았습니다.', { exact: true })).toBeVisible();
+  expect(writes).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('web-practice-filled.png'), fullPage: true });
+  await panel(page).getByRole('button', { name: '도우미 닫기' }).click();
+  await page.getByRole('button', { name: '웹 연습 도우미 열기', exact: true }).click();
+  await expect(panel(page).getByRole('button', { name: '화면 대조', exact: true })).toBeDisabled();
+  await expect(page.locator('#practice-content')).toHaveValue(job().rows[0].content);
+});
+
+test('a mistaken manual mapping displays actual and expected values and can be repaired', async ({ page }) => {
+  await open(page);
+  await panel(page).getByRole('button', { name: '연습 화면 항목 자동 지정' }).click();
+  await panel(page).getByRole('button', { name: '학년 다시 지정 ✓', exact: true }).click();
+  await page.locator('#practice-year').click();
+  await panel(page).getByRole('button', { name: '화면 대조', exact: true }).click();
+  await expect(panel(page).getByRole('status')).toContainText('선택한 값: 「2026학년도」 / 작업 파일: 「4」');
+  await panel(page).getByText('지정한 값 확인', { exact: true }).click();
+  await expect(panel(page).getByRole('list', { name: '지정한 값' })).toContainText('학년: 2026학년도 / 작업 파일: 4');
+  await expect(panel(page).getByRole('button', { name: '대조한 빈칸에 입력' })).toBeDisabled();
+  await panel(page).getByRole('button', { name: '연습 화면 항목 자동 지정' }).click();
+  await panel(page).getByRole('button', { name: '화면 대조', exact: true }).click();
+  await expect(panel(page).getByRole('button', { name: '대조한 빈칸에 입력' })).toBeEnabled();
+});
+
+test('automatic practice mapping keeps student and existing-content protections', async ({ page }) => {
+  await open(page);
+  await panel(page).getByRole('button', { name: '연습 화면 항목 자동 지정' }).click();
+  await page.getByLabel('연습 학생 선택').selectOption('2');
+  await panel(page).getByRole('button', { name: '연습 화면 항목 자동 지정' }).click();
+  await panel(page).getByRole('button', { name: '화면 대조', exact: true }).click();
+  await expect(panel(page).getByRole('status')).toContainText('선택한 값: 「2번」 / 작업 파일: 「7」');
+  await expect(page.locator('#practice-content')).toHaveValue('');
+  await page.getByLabel('연습 학생 선택').selectOption('7');
+  await page.locator('#practice-content').fill('기존 가상 문장');
+  await panel(page).getByRole('button', { name: '화면 대조', exact: true }).click();
+  await expect(panel(page).getByRole('status')).toContainText('덮어쓰지 않습니다');
+  await expect(page.locator('#practice-content')).toHaveValue('기존 가상 문장');
+});
+
+test('ambiguous or outdated practice markup clears previously prepared mappings', async ({ page }) => {
+  await open(page);
+  await panel(page).getByRole('button', { name: '연습 화면 항목 자동 지정' }).click();
+  await panel(page).getByRole('button', { name: '화면 대조', exact: true }).click();
+  await page.locator('#practice-grade').evaluate(el => el.after(el.cloneNode(true)));
+  await panel(page).getByRole('button', { name: '연습 화면 항목 자동 지정' }).click();
+  await expect(panel(page).getByRole('status')).toContainText('정확히 찾지 못');
+  await expect(panel(page).getByRole('button', { name: '대조한 빈칸에 입력' })).toBeDisabled();
+  await expect(panel(page).getByRole('button', { name: '학년도 지정', exact: true })).toBeVisible();
+  await page.locator('main').evaluate(el => el.removeAttribute('data-damim-practice'));
+  await panel(page).getByRole('button', { name: '연습 화면 항목 자동 지정' }).click();
+  await expect(panel(page).getByRole('status')).toContainText('지원하는 연습 화면이 아닙니다');
+  await expect(page.locator('#practice-content')).toHaveValue('');
+});
+
+test('web launcher recovers from a script load failure', async ({ page }) => {
+  await page.route('**/neis-helper/core.js*', route => route.abort());
+  await page.goto('/neis-practice');
+  await page.getByRole('button', { name: '웹 연습 도우미 열기', exact: true }).click();
+  await expect(page.getByText('도우미를 불러오지 못했습니다. 연결을 확인하고 다시 시도하세요.', { exact: true })).toBeVisible();
+  await page.unroute('**/neis-helper/core.js*');
+  await page.getByRole('button', { name: '웹 연습 도우미 열기', exact: true }).click();
+  await expect(panel(page).getByRole('heading', { name: '담임노트 입력 도우미' })).toBeVisible();
+});

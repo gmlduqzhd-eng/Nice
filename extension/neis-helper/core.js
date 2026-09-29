@@ -1,6 +1,14 @@
 /* Shared by the isolated content script, service worker and contract tests. */
 (function (root) {
   'use strict';
+  function practice(url) {
+    try {
+      const page = new URL(url);
+      return !page.username && !page.password && page.pathname === '/neis-practice' &&
+        ((page.protocol === 'https:' && page.hostname === 'nicehelperys.vercel.app') ||
+         (page.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(page.hostname)));
+    } catch { return false; }
+  }
   function allowed(url) {
     try {
       const location = new URL(url);
@@ -40,7 +48,7 @@
     if (kind === 'room') return raw === normalize(expected);
     return /^\d+$/.test(raw) && Number(raw) === expected;
   }
-  const api = Object.freeze({ allowed, parseJob, matches });
+  const api = Object.freeze({ allowed, practice, parseJob, matches });
   root.DamimNeis = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(globalThis);
