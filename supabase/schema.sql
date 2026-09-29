@@ -1,6 +1,8 @@
--- REFERENCE SCHEMA ONLY. Not applied to a local or hosted Supabase database.
--- Review against the chosen project before applying. This is not migration history.
--- Run as a schema administrator in a new development project, then test with two users.
+-- Applied on 2026-09-29 through the Supabase dashboard SQL Editor to the Nice project.
+-- This file is the applied schema definition, not Supabase CLI migration history.
+-- Do not replay against the existing table. Inspect the target schema before changes.
+-- SQL owner/cross-user/anonymous/constraint tests passed and test data was rolled back.
+-- Actual email login and browser cloud-backup verification remain pending.
 begin;
 
 create table public.teacher_workspaces (

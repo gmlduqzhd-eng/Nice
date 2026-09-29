@@ -1,6 +1,6 @@
 # 외부 연결 설정과 검증
 
-이 버전은 가상 자료로 사용할 수 있는 시제품입니다. 나이스 학교 검색·학사일정 조회와 Supabase 이메일 로그인·수동 저장을 위한 코드는 준비되어 있습니다. **프로젝트·인증키 연결, 실제 메일 발송, 원격 DB 스키마 적용은 수행하지 않았습니다.**
+이 버전은 가상 자료로 사용할 수 있는 시제품입니다. 2026-09-29 기존 Supabase `Nice` 프로젝트를 Vercel 배포본에 연결하고 백업 테이블 스키마를 적용했습니다. 데이터베이스 접근 격리와 실제 익명 REST 접근 거부는 검증했습니다. **실제 이메일 링크 로그인과 브라우저에서의 저장·불러오기는 아직 검증하지 않았으며, 나이스 인증키는 미설정입니다.** 연결 대상과 배포 절차는 [배포 안내](DEPLOYMENT.md), 확인한 범위는 [검증 기록](VERIFICATION.md)을 참고하세요.
 
 ## 환경변수
 
@@ -11,6 +11,9 @@
 | `NEIS_API_KEY` | 서버 전용. 나이스 교육정보 개방 포털의 인증키 |
 | `NEXT_PUBLIC_SUPABASE_URL` | 연결할 Supabase 프로젝트 URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_`로 시작하는 공개 키 |
+| `ENABLE_EXPERIMENTAL_COREPACK` | Vercel 빌드용. 값 `1`로 고정된 pnpm 11.19.0 사용 |
+
+Vercel `nice_helper_ys`에는 Supabase URL·공개 키와 Corepack 설정을 All Environments에 등록했습니다. 로컬 `.env.local`에도 Supabase 공개 설정을 별도로 작성했으며 Git에서 제외됩니다. Vercel 등록만으로 로컬 파일이 자동 생성되지는 않습니다. 나이스 인증키는 아직 등록하지 않았습니다.
 
 Supabase `service_role`·`sb_secret_` 키는 이 앱에서 사용하지 않습니다. 공개 키 자체는 브라우저에 제공되며, 저장 자료의 접근 권한은 로그인과 데이터베이스 RLS가 제한합니다. 레거시 anon JWT는 현재 설정에서 받지 않으므로 프로젝트의 현대식 publishable key를 사용합니다.
 
@@ -63,6 +66,14 @@ type ErrorResponse = { error: string; code: string };
 
 현재 구현은 **이메일 매직 링크**입니다. `signInWithOtp`라는 SDK 메서드를 사용하지만 사용자는 이메일의 로그인 링크를 누릅니다. 소셜 OAuth 공급자는 구성하지 않았습니다.
 
+현재 프로젝트는 Email 공급자가 활성화되어 있고 이메일 확인이 필요합니다. 2026-09-29 저장 후 다시 확인한 Site URL은 `https://nicehelperys.vercel.app`입니다. Redirect URLs에는 아래 세 주소 각각의 마지막 `/` 유무를 포함해 총 6개를 등록했습니다.
+
+- `https://nicehelperys.vercel.app`
+- `http://localhost:3000`
+- `http://127.0.0.1:3000`
+
+라이브 앱의 설정 화면에 로그인 입력란이 표시되는 것까지 확인했습니다. 이메일 전송·수신, 반환 세션 및 로그인한 사용자의 브라우저 백업 동작은 별도 확인이 필요합니다. 새 환경에서는 아래 절차를 따릅니다.
+
 1. 사용할 Supabase 개발 프로젝트를 정합니다. 프로젝트의 URL과 publishable key를 환경변수에 넣습니다.
 2. Authentication 설정에서 Email 공급자를 켭니다. 초대된 계정만 사용할지, 가입을 허용할지 운영 방침에 맞게 설정합니다. 초대 전용 운영이면 대시보드에서 계정을 준비하고 UI의 `shouldCreateUser` 설정도 맞춰야 합니다.
 3. Authentication → URL Configuration에서 Site URL을 실제 운영 도메인으로 설정합니다. 로컬 개발만 할 때는 `http://localhost:3000`을 사용합니다.
@@ -71,9 +82,11 @@ type ErrorResponse = { error: string; code: string };
 
 브라우저 클라이언트는 implicit flow로 반환 URL의 세션을 읽고 보관합니다. 서버에서 인증 쿠키를 읽는 SSR 보호 경로는 이 버전에 없습니다. 로그인 여부는 클라이언트 `getUser()`로 확인하고, DB 요청은 사용자 토큰과 RLS로 검사합니다. [이메일 인증](https://supabase.com/docs/guides/auth/auth-email-passwordless), [Redirect URL 설정](https://supabase.com/docs/guides/auth/redirect-urls), [브라우저 인증 흐름](https://supabase.com/docs/guides/auth/sessions/implicit-flow)
 
-## 수동 저장용 참고 스키마
+## 수동 저장용 스키마
 
-`supabase/schema.sql`은 **적용 전 참고 SQL**이며 정식 마이그레이션이나 운영 DB 적용 기록이 아닙니다. 새 개발 프로젝트에서 검토·적용한 다음 사용자별 접근 검증을 해야 합니다. 같은 테이블이 이미 존재하면 임의로 덮어쓰지 않고 현재 스키마와 차이를 먼저 확인합니다.
+`supabase/schema.sql`은 2026-09-29 Supabase `Nice` 프로젝트의 대시보드 SQL Editor에서 적용했습니다. 적용 전 `public` 테이블이 비어 있음을 확인했습니다. **이 파일은 Supabase CLI 마이그레이션 이력이 아니며, 같은 프로젝트에 그대로 다시 실행하는 용도가 아닙니다.** 다음 스키마 변경은 실제 DB 상태와 차이를 먼저 확인하고 별도 변경 파일과 검증 기록으로 관리합니다.
+
+적용 후 SQL 트랜잭션에서 소유자 CRUD, 타 사용자 접근·소유자 변경 차단, 익명 권한 및 데이터 제약조건 검증이 모두 통과했습니다. 검증 데이터는 트랜잭션 롤백으로 되돌렸으며 Auth 사용자 목록이 비어 있음을 확인했습니다. 재현용 SQL은 [`supabase/tests/rls-verification.sql`](../supabase/tests/rls-verification.sql)에 있습니다. 원격에서는 공백과 설명을 축약한 동등 SQL을 실행했습니다. 공개 키로 호출한 익명 REST 조회도 HTTP 401, PostgreSQL 코드 `42501`로 거부되었습니다. 이 결과는 이메일 로그인과 브라우저 전체 저장 흐름의 검증을 대신하지 않습니다.
 
 `public.teacher_workspaces`의 구조:
 
@@ -105,13 +118,13 @@ const result = await supabase.from("teacher_workspaces")
 
 저장은 해당 계정의 이전 스냅샷을 대체합니다. 공동 편집, 변경 이력, 충돌 병합, 여러 기기 동시 저장 제어는 아직 없습니다. 불러오기를 적용하기 전에 로컬 자료를 백업합니다. 가상 자료·로컬 기록은 로그인이나 설정만으로 전송하지 않으며, 저장 버튼을 선택한 경우에만 보냅니다.
 
-## 연결 후 확인할 동작
+## 이후 확인할 동작
 
 - 설정이 없는 상태에서 로컬 기록·점검·내보내기 기능이 동작하고 외부 연결은 미설정으로 표시되는지 확인합니다.
 - 나이스 인증키를 연결하고 학교 검색 결과의 학교 코드·주소, 해당 학교의 한 달 일정을 공식 포털과 대조합니다.
 - 이메일 링크로 로그인 → 수동 저장 → 로그아웃 → 재로그인 → 불러오기를 가상 데이터로 시험합니다.
-- 계정 A·B를 별도로 준비하여 B가 A의 `user_id`를 넣은 직접 SELECT·UPDATE·DELETE 요청으로 A 행에 접근하지 못하는지 확인합니다. 소유자를 바꿔 INSERT·UPDATE하면 거절되는지 검사합니다.
-- 로그아웃한 요청은 테이블 접근이 거절되는지, 로그인된 각 계정은 자신의 행만 조회·수정·삭제할 수 있는지 확인합니다.
+- SQL에서 확인한 RLS 격리를 두 실제 로그인 세션의 REST 요청으로도 확인합니다. B가 A의 `user_id`를 넣은 SELECT·UPDATE·DELETE 및 소유자를 바꾸는 INSERT·UPDATE가 거절되는지 검사합니다.
+- 로그인된 각 계정은 자신의 행만 조회·수정·삭제할 수 있는지 확인합니다. 익명 REST 조회 거부는 이미 확인했으며 인증 설정 변경 시 재확인합니다.
 - Supabase Advisors로 스키마·RLS·권한을 확인합니다. 실제 학생 자료 사용 전 접근권한·보유기간·외부 처리 조건을 확정합니다.
 
-마지막 네트워크 연결 점검은 환경변수 및 대상 프로젝트가 정해진 뒤 수행해야 합니다. 정적 코드 검사나 빌드 성공을 실제 인증·DB 접근 검증으로 표시하지 않습니다.
+정적 코드 검사·빌드, DB 역할별 검증, 실제 이메일 인증과 브라우저 저장 검증을 구분해서 기록합니다. `supabase/schema.sql`은 이미 적용되어 있으므로 단순 배포 시 다시 실행하지 않습니다.

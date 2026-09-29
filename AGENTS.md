@@ -18,5 +18,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - No credentials or real student data in source, logs, fixtures, or documentation.
 - Keep all dependency versions pinned and update the pnpm lockfile when dependencies change.
 - Run `pnpm typecheck`, `pnpm test`, `pnpm build`; run relevant `pnpm test:e2e` flows when changing UI behavior.
-- Supabase schema is unapplied reference SQL. Actual schema changes require an identified development project and isolated access tests.
+- `supabase/schema.sql` was applied through the Supabase dashboard SQL Editor to the existing Nice development project on 2026-09-29. It is not migration history and must not be replayed blindly. Future schema changes require checking the actual project schema and isolated access tests.
+- Read `docs/DEPLOYMENT.md` and `docs/VERIFICATION.md` for the active GitHub/Vercel/Supabase targets and verified limits. SQL RLS checks passed; actual email login and browser cloud backup remain unverified.
 - Never claim a live integration, remote migration, or deployment is complete without verifying it.
