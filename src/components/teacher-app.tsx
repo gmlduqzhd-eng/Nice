@@ -124,6 +124,7 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
   const navigate = (target: View) => { setView(target); setMobileMenu(false); setQuery(''); };
   const openStudent = (id: string) => { setSelected(id); navigate('workbench'); };
   const replaceData = (next: WorkspaceData) => { setData(next); setSelected(next.students[0]?.id ?? ''); };
+  const isCurrentWorkspace = (snapshot: WorkspaceData) => writable.current && dataRef.current === snapshot && localStorage.getItem(storageKey) === expectedRaw.current;
 
   if (!ready) return <main id="main-content" className="workspace-loading" role="status">저장된 기록을 불러오고 있습니다…</main>;
 
@@ -171,9 +172,9 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
         {view === 'neis-job' && <NeisJobPanel data={data} onReview={id => { setSelected(id); navigate('workbench'); }}/>}
         {view === 'classroom' && <ClassroomPanel key={JSON.stringify(data.classroom)} data={data} onChange={setData} onToast={notify}/>}
         {view === 'school' && <><div className="page-heading"><div><div className="eyebrow">나이스 교육정보 개방 포털</div><h1>학교 · 학사일정</h1><p>학교를 검색해 공개된 학사일정을 확인하세요.</p></div></div><SchoolPanel onToast={notify}/></>}
-        {view === 'settings' && <><div className="page-heading"><div><div className="eyebrow">나의 업무 공간 관리</div><h1>설정 및 백업</h1><p>내 기록을 파일로 보관하거나, 로그인한 계정에 직접 저장하세요.</p></div></div><SettingsPanel data={data} onReplace={replaceData} onToast={notify}/></>}
+        {view === 'settings' && <><div className="page-heading"><div><div className="eyebrow">나의 업무 공간 관리</div><h1>설정 및 백업</h1><p>내 기록을 파일로 보관하거나, 로그인한 계정에 직접 저장하세요.</p></div></div><SettingsPanel data={data} onReplace={replaceData} onToast={notify} isCurrentWorkspace={isCurrentWorkspace} readOnly={storageBlocked} onViewObservations={() => navigate('observations')}/></>}
         </fieldset>
-        <footer className="app-footer"><div><span>담임노트 <b>·</b> 선생님의 기록에 여유를 더합니다.</span><small>{COPYRIGHT}</small></div><nav className="service-links" aria-label="서비스 안내"><a href="/privacy">개인정보처리방침</a><a href="/terms">이용약관</a></nav><details className="copyright-details"><summary>저작권 안내</summary><p>{COPYRIGHT}<br/>오픈소스 구성요소에는 각 프로젝트의 라이선스가 적용됩니다. 선생님이 직접 작성한 기록은 서비스의 저작권 표기 대상에 포함되지 않습니다.</p></details><span>v0.4 · 가상 학급 체험판</span></footer>
+        <footer className="app-footer"><div><span>담임노트 <b>·</b> 선생님의 기록에 여유를 더합니다.</span><small>{COPYRIGHT}</small></div><nav className="service-links" aria-label="서비스 안내"><a href="/privacy">개인정보처리방침</a><a href="/terms">이용약관</a></nav><details className="copyright-details"><summary>저작권 안내</summary><p>{COPYRIGHT}<br/>오픈소스 구성요소에는 각 프로젝트의 라이선스가 적용됩니다. 선생님이 직접 작성한 기록은 서비스의 저작권 표기 대상에 포함되지 않습니다.</p></details><span>v0.4.2 · 가상 학급 체험판</span></footer>
       </main>
     </div>
     {toast && <div role="status" className="toast"><CircleCheck size={18}/>{toast}<button aria-label="알림 닫기" onClick={()=>setToast('')}><X size={15}/></button></div>}

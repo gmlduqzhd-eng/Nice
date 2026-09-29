@@ -69,6 +69,10 @@ test("구버전 원본을 남기고 변환하며 다른 탭의 편집을 감지�
   await page.getByRole("button", { name: "학생 추가", exact: true }).click();
   await expect(other.getByRole("main").getByRole("alert")).toContainText("다른 탭");
   await expect(other.getByRole("button", { name: "학생 추가", exact: true })).toBeDisabled();
+  await other.getByRole('button', { name: '설정 및 백업', exact: true }).click();
+  await expect(other.getByRole('button', { name: 'JSON 백업 불러오기', exact: true })).toBeDisabled();
+  await expect(other.getByRole('button', { name: '예시 데이터 초기화', exact: true })).toBeDisabled();
+  await expect(other.getByRole('button', { name: 'JSON 백업 내려받기', exact: true })).toBeEnabled();
   expect(await page.evaluate(() => localStorage.getItem("damim-note.demo.v1"))).toBe(legacy);
   await other.getByRole("button", { name: "최신 기록 불러오기", exact: true }).click();
   await openClassroom(other);
