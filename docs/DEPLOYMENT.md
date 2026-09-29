@@ -1,6 +1,6 @@
 # 배포와 이후 수정
 
-2026-09-29 기준으로 가상 데이터 시제품을 기존 GitHub·Vercel·Supabase 프로젝트에 연결했습니다. [배포된 앱](https://nicehelperys.vercel.app)에서 기본 화면을 사용할 수 있습니다. Google GIS 구현의 커밋 `d4bd638` 배포가 Ready이며 운영 앱의 공식 한국어 로그인 버튼과 공개 정책 페이지를 확인했습니다. Google·이메일의 실제 로그인과 로그인 후 클라우드 저장·불러오기는 아직 검증하지 않았습니다.
+2026-09-29 기준으로 가상 데이터 시제품을 기존 GitHub·Vercel·Supabase 프로젝트에 연결했습니다. [배포된 앱](https://nicehelperys.vercel.app)에서 기본 화면을 사용할 수 있습니다. Google GIS 구현의 커밋 `d4bd638` 배포가 Ready이며 운영 앱의 공식 한국어 로그인 버튼과 공개 정책 페이지를 확인했습니다. Google 앱도 Production으로 전환했습니다. Google·이메일의 실제 로그인과 로그인 후 클라우드 저장·불러오기는 아직 검증하지 않았습니다.
 
 ## 연결 대상
 
@@ -48,7 +48,7 @@ GitHub는 코드를 보관하고 Vercel이 웹앱을 배포합니다. Supabase�
 
 공개 환경변수는 빌드 때 브라우저 번들에 들어가므로 값 변경 후 다시 배포합니다. `service_role`·비밀 키를 `NEXT_PUBLIC_` 변수에 넣지 않습니다. 실제 키, `.env.local`, `.vercel/`은 Git에 넣지 않습니다. 나이스 `NEIS_API_KEY`는 아직 설정하지 않았습니다.
 
-Google 로그인은 GIS 공식 버튼의 ID token을 Supabase에 전달하도록 구현했습니다. Supabase에 공개 Client ID를 등록하고 Secret은 빈값으로 저장했으며, 공개 Auth 설정에서 Google 활성화를 확인했습니다. 운영 앱 origin도 Google 웹 클라이언트에 등록했습니다. 운영 환경의 공개 Client ID와 `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true`를 반영한 커밋 `d4bd638` 배포가 `nice_helper_ys`에서 Ready인 것을 확인했고, 앱에서 공식 한국어 버튼을 확인했습니다. `/privacy`와 `/terms`도 무인증 HTTP 200 및 제목을 확인했습니다. **Chrome 연결이 끊겨 최종 계정 선택·인증·원격 백업 검증은 완료하지 못했습니다.** Google Cloud 앱은 현재 Testing 상태입니다.
+Google 로그인은 GIS 공식 버튼의 ID token을 Supabase에 전달하도록 구현했습니다. Supabase에 공개 Client ID를 등록하고 Secret은 빈값으로 저장했으며, 공개 Auth 설정에서 Google 활성화를 확인했습니다. 운영 앱 origin도 Google 웹 클라이언트에 등록했습니다. 운영 환경의 공개 Client ID와 `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true`를 반영한 커밋 `d4bd638` 배포가 `nice_helper_ys`에서 Ready인 것을 확인했고, 앱에서 공식 한국어 버튼을 확인했습니다. `/privacy`와 `/terms`도 무인증 HTTP 200 및 제목을 확인했습니다. Google Audience는 **Production 전환 완료** 상태입니다. 인증 센터는 기본 인증 범위에 데이터 접근 심사가 필요 없다고 안내하며, 별도 브랜드 검증은 진행하지 않았습니다. Codex 내장 브라우저에서 Google 버튼 클릭 후 FedCM 토큰 수신 오류가 관측됐으나 원인은 확정하지 않았습니다. **일반 브라우저의 실제 계정 인증·원격 백업 검증은 남아 있습니다.** 이전 Chrome 연결 중단 이력과 현재 관측은 [Google 로그인 안내](GOOGLE_AUTH.md)에 구분해 기록했습니다.
 
 GIS 앱에는 공개 `NEXT_PUBLIC_GOOGLE_CLIENT_ID`와 표시 플래그 `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED`를 환경별로 설정합니다. Client ID는 공개 앱 식별자이며 Client Secret은 이 흐름에 필요하지 않습니다. 예제 플래그는 기본 `false`이고 대상 빌드에서 `true`로 바꿉니다. 미리보기의 정확한 origin도 Google Authorized JavaScript origins에 등록해야 합니다. 환경변수 저장 후 다시 배포하고, 모의 검증과 실제 계정 선택·인증·수동 백업 검증 결과를 구분해 기록합니다. [Google 설정과 확인 절차](GOOGLE_AUTH.md)
 

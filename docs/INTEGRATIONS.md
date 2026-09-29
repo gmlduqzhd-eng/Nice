@@ -98,7 +98,7 @@ type ErrorResponse = { error: string; code: string };
 
 Supabase Google 공급자에 공개 Client ID를 등록하고 Secret은 빈값으로 저장했으며 공개 Auth 설정에서 `google: true`를 확인했습니다. Google 웹 클라이언트에 운영 origin `https://nicehelperys.vercel.app`도 등록했습니다. 앱은 GIS 공식 버튼의 ID token을 `signInWithIdToken({ provider: "google", token, nonce })`으로 교환하도록 구현했고 로컬 검증을 마쳤습니다. 커밋 `d4bd638`의 `nice_helper_ys` 배포가 Ready이며 운영 앱에서 Google 공식 한국어 버튼 표시를 확인했습니다. 이 인증 경로는 Client Secret을 사용하지 않습니다. [Supabase GIS 안내](https://supabase.com/docs/guides/auth/social-login/auth-google#google-pre-built)
 
-**Google 앱 게시 상태는 Testing이며, 실제 계정 선택·인증·원격 백업은 아직 검증하지 않았습니다.** Google 버튼을 클릭하는 중 Chrome 연결이 끊겨 재연결을 요청한 상태입니다. Secret 수동 입력은 필요하지 않으며, 재연결 후 실제 사용자 흐름을 이어서 확인합니다. 공식 버튼 표시만으로 인증 성공을 판단하지 않습니다. 기존 `signInWithOAuth` redirect 방식의 모의 테스트 결과는 GIS의 검증 결과와 구분합니다.
+**Google 앱은 Production으로 전환했으며, 실제 계정 인증·원격 백업은 아직 검증하지 않았습니다.** 인증 센터에서 기본 인증 범위에는 데이터 접근 심사가 필요 없다는 안내를 확인했습니다. 앱 이름·로고 표시용 브랜드 검증은 진행하지 않았습니다. Chrome 연결 중단 이후 Codex 내장 브라우저에서 실제 Google 버튼을 눌렀으나 FedCM 토큰 수신 오류가 관측됐습니다. 원인은 확정하지 않았으며, 일반 브라우저에서 실제 사용자 흐름을 이어서 확인해야 합니다. Secret 수동 입력은 필요하지 않습니다. 공개 전환·공식 버튼 표시만으로 인증 성공을 판단하지 않습니다. 기존 `signInWithOAuth` redirect 방식의 모의 테스트 결과는 GIS의 검증 결과와 구분합니다.
 
 앱에는 `NEXT_PUBLIC_GOOGLE_CLIENT_ID`와 `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED`를 설정한 뒤 다시 빌드합니다. Client ID는 Supabase에 등록한 웹 클라이언트와 일치해야 하며, 실제로 사용할 origin도 Google 설정에 등록해야 합니다. GIS popup의 JavaScript callback에는 새 redirect endpoint가 필요하지 않습니다. nonce 원문은 Supabase로, SHA-256 hex는 GIS로 전달하며 nonce 검사 생략은 사용하지 않습니다. 추가 Google 데이터 권한이나 오프라인 접근은 요청하지 않습니다. 정확한 주소·공개 설정·검증 절차는 [Google 로그인 안내](GOOGLE_AUTH.md)에 기록합니다.
 

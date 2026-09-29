@@ -155,7 +155,7 @@ export default function AuthDialog({ initialMessage, onClose, resendTimes }: Pro
         <p className={styles.eyebrow}>담임노트 계정</p>
         <h2 id="auth-dialog-title" ref={headingRef} tabIndex={-1}>{googleAuthEnabled ? "간편하게 시작하기" : "이메일로 시작하기"}</h2>
         <p id="auth-dialog-description" className={styles.description}>{googleAuthEnabled ? <>Google 계정을 선택하면 시작할 수 있어요.<br />처음이라면 가입도 함께 진행해요.</> : <>비밀번호 없이, 이메일 하나로.<br />처음이라면 가입까지 한 번에 진행해요.</>}</p>
-        {isSupabaseConfigured && <p className={styles.availability}>현재 이메일 로그인은 테스트 계정만 이용할 수 있어요. 로그인 없이 기록 기능을 먼저 체험해 보세요.</p>}
+        {isSupabaseConfigured && <p className={styles.availability}>{googleAuthEnabled ? "이메일 로그인은 테스트 계정만 이용할 수 있어요." : "현재 이메일 로그인은 테스트 계정만 이용할 수 있어요. 로그인 없이 기록 기능을 먼저 체험해 보세요."}</p>}
 
         {!isSupabaseConfigured ? (
           <p className={styles.notice} role="status">{googleAuthEnabled ? "로그인 연결을 준비하고 있습니다." : "이메일 로그인 연결을 준비하고 있습니다."} 지금은 로그인 없이 모든 연습 기능을 이용해 주세요.</p>
@@ -173,7 +173,7 @@ export default function AuthDialog({ initialMessage, onClose, resendTimes }: Pro
           </div>
         ) : (
           <form className={styles.form} onSubmit={requestLink}>
-            {googleAuthEnabled && <><GoogleSignIn disabled={busy} onCredential={signInWithGoogle} /><span className={styles.divider}>또는 이메일로</span></>}
+            {googleAuthEnabled && <><GoogleSignIn disabled={busy} onCredential={signInWithGoogle} /><span className={styles.divider}>테스트 계정용 이메일</span></>}
             <label className="field" htmlFor="auth-email">이메일 주소
               <input ref={emailRef} id="auth-email" className="input" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="teacher@example.com" required maxLength={254} value={email} onChange={event => { setEmail(event.target.value); setMessage(""); setNow(Date.now()); }} disabled={busy} />
             </label>

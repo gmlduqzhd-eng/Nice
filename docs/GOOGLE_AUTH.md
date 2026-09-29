@@ -1,6 +1,6 @@
 # Google 로그인 연결과 검증
 
-현재 상태는 **Supabase Google 공급자 활성화 / GIS 운영 배포·공식 한국어 버튼 표시 확인 / 실제 로그인 미검증**입니다. 메일 발송 서비스 없이 Google 계정 선택으로 가입과 로그인을 함께 처리하도록 구현했습니다. 공급자 설정·버튼 표시 성공은 실제 사용자 인증 성공과 구분합니다.
+현재 상태는 **Google 앱 Production 전환 완료 / Supabase Google 공급자 활성화 / GIS 운영 배포·공식 한국어 버튼 표시 확인 / 실제 로그인 미검증**입니다. 메일 발송 서비스 없이 Google 계정 선택으로 가입과 로그인을 함께 처리하도록 구현했습니다. 공개 설정·버튼 표시 성공은 실제 사용자 인증 성공과 구분합니다.
 
 ## 사용할 인증 방식
 
@@ -13,16 +13,23 @@ Google Identity Services(GIS)의 공식 버튼이 발급한 ID token을 브라�
 ## 2026-09-29 확인한 설정과 남은 검증
 
 - Google Cloud 프로젝트: `My Project 36646` (`refined-graph-510101-c2`). 기존 프로젝트를 사용합니다.
-- Google 인증 플랫폼 앱 이름: `담임노트`, 대상: 외부, 게시 상태: `Testing`.
+- Google 인증 플랫폼 앱 이름: `담임노트`, 대상: 외부, 현재 게시 상태: `Production`. 아래 추가 확인 기록을 참고합니다.
 - 웹 OAuth 클라이언트 `담임노트 웹 로그인`과 아래 운영 JavaScript origin을 등록했습니다.
 - Supabase Google 공급자는 **Client ID 등록·Secret 빈값**으로 저장했고 공개 Auth 설정에서 `google: true`를 확인했습니다. nonce 검사 생략은 사용하지 않습니다.
 - GIS 구현의 단위 테스트 31개, 타입 검사, Google 표시가 켜진 운영 빌드가 통과했습니다. 켜진 빌드에서 인증 브라우저 9개·앱 12개, 꺼진 설정에서 인증 7개가 통과했고 Google 전용 2개는 제외했습니다. 브라우저 인증은 외부 요청을 차단한 모의 검증입니다.
 - 커밋 `d4bd638`의 Vercel `nice_helper_ys` 배포가 Ready인 것을 확인했습니다. 운영 앱 `https://nicehelperys.vercel.app`에서 Google 공식 한국어 버튼이 표시됐습니다. 운영 Client ID와 `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true`를 빌드에 반영했습니다.
-- `/privacy`, `/terms`는 로그인 없이 HTTP 200으로 열렸고 페이지 제목을 확인했습니다. Google Branding에 홈페이지·개인정보처리방침·약관 URL을 저장한 성공 알림을 확인했습니다. Audience의 앱 게시 버튼은 활성화됐지만 게시 상태는 아직 Testing입니다.
-- 실제 Google iframe 버튼을 클릭하는 중 Chrome 브라우저 연결이 끊겨 연결된 브라우저 목록에서 사라졌습니다. 사용자가 재연결했다고 답한 뒤 목록 재조회·자동화 세션 초기화·Chrome 탭 열기를 다시 시도했지만 Chrome을 확인하지 못했습니다. 최종 계정 선택·Supabase 인증·가상 자료 원격 백업은 아직 검증하지 못했습니다. 실패한 인증으로 단정할 수 없으며 마지막 확인은 공식 버튼 표시까지입니다. **Client Secret 수동 입력은 필요하지 않습니다. 현재 필요한 것은 Chrome 자동화 연결을 복구한 후 실제 사용자 흐름을 이어서 확인하는 일입니다.**
+- `/privacy`, `/terms`는 로그인 없이 HTTP 200으로 열렸고 페이지 제목을 확인했습니다. Google Branding에 홈페이지·개인정보처리방침·약관 URL을 저장한 성공 알림을 확인했습니다.
+- 직전 확인 이력: Google 버튼 클릭 중 Chrome 연결이 끊겼고 재연결 후에도 자동화 목록에서 Chrome을 확인하지 못했습니다. 이 시점의 Google 앱 상태는 Testing이었으며, 이후 아래와 같이 공개 설정을 완료했습니다.
 - 기본 SMTP의 조직 팀원 제한은 그대로입니다. Google 설정 변경이 일반 사용자에게 이메일 로그인을 열어 주지는 않습니다.
 
 이전에 Google 버튼이 켜진 빌드와 꺼진 개발 서버에서 각각 인증 브라우저 시나리오 7개를 통과한 기록은 **기존 OAuth redirect 구현의 모의 검증**입니다. GIS 구현이나 실제 Google 인증 교환의 검증 결과로 재사용하지 않습니다. 이후 결과는 [검증 기록](VERIFICATION.md)을 확인합니다.
+
+## 2026-09-29 추가 확인: 공개 전환 완료, 실제 인증 검증은 남음
+
+- Codex 내장 브라우저의 기존 Google 계정 세션으로 대상 Google Cloud 프로젝트에 다시 접속했습니다. Audience에서 앱 게시를 진행한 뒤 **‘프로덕션 단계’와 ‘테스트로 돌아가기’**가 표시되는 것을 확인했습니다.
+- 인증 센터의 Data access status에서 **민감하거나 제한된 범위를 요청하지 않으므로 인증이 필요 없다는 안내**를 확인했습니다. Brand는 **‘브랜딩이 사용자에게 표시되고 있지 않음’** 상태이며, 앱 이름·로고 표시용 브랜드 검증은 진행하지 않았습니다. 앱 게시와 브랜드 검증은 별도 상태입니다.
+- 운영 앱의 실제 Google 공식 iframe 버튼을 Codex 내장 브라우저에서 클릭한 뒤 콘솔에 `[GSI_LOGGER]: FedCM get() rejects with NetworkError: Error retrieving a token.`이 나타났습니다. 오류 원인은 확정하지 않았습니다. 이 관측만으로 일반 브라우저에서도 실패한다고 판단하지 않습니다.
+- Chrome은 자동화 목록에서 여전히 확인되지 않았습니다. **일반 브라우저에서 계정 선택·Supabase 인증 → 가상 자료 수동 저장 → 로그아웃·재로그인 → 불러오기를 확인해야 합니다.** 실제 인증과 원격 백업 성공은 아직 기록할 수 없으며, Client Secret 수동 입력은 필요하지 않습니다.
 
 ## 주소와 환경변수
 
@@ -53,7 +60,7 @@ CSP를 사용하는 경우 GIS의 script·frame·connect·style 주소와 Supaba
 
 Google의 기본 신원 범위인 `openid`, 이메일, 기본 프로필만 요청합니다. Gmail·Drive·Calendar 권한이나 오프라인 접근은 필요하지 않습니다. 이 범위만 요청하는 로그인은 Testing 사용자 allowlist와 7일 인증 만료 제한의 예외지만, 학교 Workspace 관리자가 외부 앱을 제한할 수 있습니다. [Google Audience 안내](https://support.google.com/cloud/answer/15549945?hl=en)
 
-홈페이지·개인정보처리방침·약관 URL은 Google Branding에 저장했습니다. 남은 단계는 Audience 게시 상태와 실제 계정 인증 확인입니다. 앱 공개 상태와 이름·로고를 표시하는 브랜드 검증은 구분합니다. Vercel 앱이 배포됐어도 Google의 현재 Testing 상태를 공개 전환 완료로 표현하지 않습니다. [Google Branding 안내](https://support.google.com/cloud/answer/15549049?hl=en)
+홈페이지·개인정보처리방침·약관 URL을 저장했고 Audience의 Production 전환을 확인했습니다. 기본 인증 범위의 데이터 접근 심사는 필요 없다고 인증 센터에서 확인했으며, 남은 검증은 실제 계정 인증과 백업 흐름입니다. 앱 이름·로고를 Google 동의 화면에 표시하려면 별도 브랜드 검증이 필요합니다. 미검증 브랜드는 앱 도메인으로 표시되며, 현재 기본 로그인 확인의 선행조건으로 도메인 구매나 브랜드 심사를 추가하지 않습니다. [Google Branding 안내](https://support.google.com/cloud/answer/15549049?hl=en), [브랜드 검증 조건](https://developers.google.com/identity/protocols/oauth2/production-readiness/brand-verification)
 
 대상 빌드에서 버튼 표시 → 계정 선택·동의 → 앱의 ‘내 계정’ 표시 → 명시적인 가상 자료 백업 → 로그아웃 → 재로그인·불러오기를 확인합니다. 취소·거부·네트워크 실패 후 재시도와 다른 계정 자료 접근 차단도 확인합니다. 로그인만으로 관찰 기록을 업로드해서는 안 됩니다.
 

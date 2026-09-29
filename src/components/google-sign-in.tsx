@@ -84,6 +84,7 @@ export default function GoogleSignIn({ disabled, onCredential }: Props) {
     <div className={styles.googleSignIn} data-testid="google-signin" data-state={state} aria-busy={state === "loading" || submitting}>
       {state === "loading" && <p className={styles.hint} role="status">Google 로그인 준비 중…</p>}
       <div ref={buttonHost} data-testid="google-signin-button" className={styles.googleButton} inert={disabled || submitting || state !== "ready"} />
+      {state === "ready" && <p className={styles.hint}>로그인 창이 열리지 않으면 Chrome이나 Safari에서 이 사이트를 열어 주세요.</p>}
       {state === "error" && <>
         <p className={styles.notice} role="alert">Google 로그인 화면을 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.</p>
         <button type="button" className={`button secondary ${styles.fullWidth}`} disabled={disabled} onClick={() => setAttempt(value => value + 1)}>Google 로그인 다시 준비하기</button>
