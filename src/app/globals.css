@@ -20,6 +20,24 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
 /* A short path from the first visit to a useful teaching record. */
+.workspace-content{border:0;padding:0;margin:0;min-width:0}
+.workspace-loading{padding:60px 24px;text-align:center;color:#536690}
+.classroom-panel .page-heading{margin-bottom:4px}
+.classroom-card{padding:24px;min-width:0}
+.classroom-card h2{font-size:18px;margin-bottom:12px}
+.classroom-card h3{font-size:16px;margin-bottom:12px}
+.classroom-card>.muted{font-size:14px;line-height:1.8;margin-bottom:20px}
+.classroom-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.student-form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px}
+.student-form .field{flex:1;min-width:100px;margin:0}
+.student-form .field:first-child{flex:0 1 100px}
+.student-form .button{min-height:42px}
+.roster-table{width:100%}.roster-table td{overflow-wrap:anywhere}.roster-table td:last-child{min-width:85px}
+.roster-preview{border:1px solid #d9e3fc;background:#f7f9ff;border-radius:10px;padding:20px}
+.roster-preview ul{max-height:260px;overflow:auto;padding:0 0 0 24px;margin-bottom:20px;line-height:2;font-size:14px;overflow-wrap:anywhere}
+.classroom-card .section-heading{flex-wrap:wrap}
+.classroom-card .section-heading h2{margin-bottom:0}
+@media(max-width:600px){.classroom-card{padding:18px}.classroom-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.roster-table th,.roster-table td{padding:12px 6px;font-size:12px}.roster-table .row{gap:0}.classroom-card .section-heading{gap:12px;margin-bottom:16px}}
 .account-button{min-height:40px;white-space:nowrap;padding:9px 15px!important}
 .quick-guide{margin:0 0 24px;padding:22px;border:1px solid #d9e3fc;border-radius:14px;background:linear-gradient(115deg,#f0f5ff,#fff)}
 .quick-guide-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}

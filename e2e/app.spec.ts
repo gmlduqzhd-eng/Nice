@@ -191,7 +191,7 @@ test("JSON 백업 다운로드와 확인을 거친 복원이 실제 기록을 �
   expect(filePath).not.toBeNull();
   const exported = await readFile(filePath!);
   const backup = JSON.parse(exported.toString("utf8"));
-  expect(backup.version).toBe(1);
+  expect(backup.version).toBe(2);
   expect(backup.students).toHaveLength(8);
   expect(backup.observations).toHaveLength(12);
 
@@ -262,7 +262,7 @@ test("손상된 브라우저 저장 원문을 복구 사본으로 내려받을 �
   const damaged = '{"version":1,"students":[{"name":"손상된 연습 자료"}';
   await page.evaluate(raw => localStorage.setItem("damim-note.demo.v1", raw), damaged);
   await page.reload();
-  await expect(page.getByRole("main").getByRole("alert")).toContainText("기존 원본은 브라우저에 별도 보관");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("기존 원본은 브라우저에 그대로 보존");
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "복구 사본 다운로드", exact: true }).click();
   const download = await downloadPromise;

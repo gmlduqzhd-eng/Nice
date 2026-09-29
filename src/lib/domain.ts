@@ -25,10 +25,27 @@ export interface Draft {
 }
 
 export interface WorkspaceData {
-  version: 1;
+  version: 2;
+  classroom: Classroom;
   students: Student[];
   observations: Observation[];
   drafts: Draft[];
+}
+
+export interface Classroom {
+  year: number;
+  grade: number;
+  room: string;
+  semester: 1 | 2;
+}
+
+export const DEFAULT_CLASSROOM: Classroom = { year: 2026, grade: 4, room: "2", semester: 2 };
+
+function validClassroom(value: unknown): value is Classroom {
+  return isRecord(value) && Number.isInteger(value.year) && Number(value.year) >= 2000 && Number(value.year) <= 2100 &&
+    Number.isInteger(value.grade) && Number(value.grade) >= 1 && Number(value.grade) <= 6 &&
+    isText(value.room, 20) && !!value.room.trim() && !/[\r\n\t]/.test(value.room) &&
+    (value.semester === 1 || value.semester === 2);
 }
 
 export type IssueKind =
@@ -70,7 +87,9 @@ const isTimestamp = (value: unknown): value is string =>
 
 /** Validate persisted/imported JSON and return a clean, independent object. */
 export function parseWorkspace(input: unknown): WorkspaceData | null {
-  if (!isRecord(input) || input.version !== 1) return null;
+  if (!isRecord(input) || (input.version !== 1 && input.version !== 2)) return null;
+  const classroom = input.version === 1 ? DEFAULT_CLASSROOM : input.classroom;
+  if (!validClassroom(classroom)) return null;
   const { students, observations, drafts } = input;
   if (!Array.isArray(students) || students.length > 500 ||
       !Array.isArray(observations) || observations.length > 50_000 ||
@@ -114,11 +133,46 @@ export function parseWorkspace(input: unknown): WorkspaceData | null {
     });
   }
   if (!unique(cleanDrafts.map((d) => d.id))) return null;
-  const result: WorkspaceData = { version: 1, students: cleanStudents, observations: cleanObservations, drafts: cleanDrafts };
+  const result: WorkspaceData = { version: 2, classroom: { year: classroom.year, grade: classroom.grade, room: classroom.room.trim(), semester: classroom.semester }, students: cleanStudents, observations: cleanObservations, drafts: cleanDrafts };
   const evidenceIndex = new Map(cleanObservations.map((observation) => [observation.id, observation.studentId]));
   // Draft-stage broken links remain inspectable. Completed stages must retain valid evidence.
   if (cleanDrafts.some((draft) => draft.status !== "draft" && !canReview(result, draft, evidenceIndex))) return null;
   return result;
+}
+
+export function updateClassroom(data: WorkspaceData, classroom: Classroom): WorkspaceData {
+  if (!validClassroom(classroom)) throw new Error("학년도(2000~2100), 학년(1~6), 반과 학기를 확인해 주세요.");
+  return { ...data, classroom: { ...classroom, room: classroom.room.trim() } };
+}
+
+export function addStudents(data: WorkspaceData, students: Student[]): WorkspaceData {
+  if (!students.length) throw new Error("추가할 학생을 입력해 주세요.");
+  const next = { ...data, students: [...data.students, ...students.map(student => ({ ...student, name: student.name.trim() }))].sort((a, b) => a.number - b.number) };
+  const parsed = parseWorkspace(next);
+  if (!parsed) throw new Error("번호(1~999) 중복, 이름 또는 최대 인원(500명)을 확인해 주세요.");
+  return parsed;
+}
+
+export function editStudent(data: WorkspaceData, id: string, number: number, name: string): WorkspaceData {
+  const student = data.students.find(item => item.id === id);
+  if (!student) throw new Error("학생을 찾을 수 없습니다.");
+  const trimmed = name.trim();
+  // A name can occur in any draft. Preserve the text and its evidence, but require re-review.
+  const next = { ...data,
+    students: data.students.map(item => item.id === id ? { ...item, number, name: trimmed } : item).sort((a, b) => a.number - b.number),
+    drafts: student.name === trimmed ? data.drafts : data.drafts.map(draft => ({ ...draft, status: "draft" as const, updatedAt: new Date().toISOString() })),
+  };
+  const parsed = parseWorkspace(next);
+  if (!parsed) throw new Error("번호(1~999) 중복과 이름을 확인해 주세요.");
+  return parsed;
+}
+
+export function removeStudent(data: WorkspaceData, id: string): WorkspaceData {
+  if (!data.students.some(student => student.id === id)) throw new Error("학생을 찾을 수 없습니다.");
+  if (data.observations.some(item => item.studentId === id) || data.drafts.some(item => item.studentId === id)) {
+    throw new Error("관찰 기록이나 초안이 연결된 학생은 삭제할 수 없습니다. 기존 기록을 먼저 확인해 주세요.");
+  }
+  return { ...data, students: data.students.filter(student => student.id !== id) };
 }
 
 const normalizeContent = (content: string) => content.normalize("NFC").trim().replace(/\s+/gu, " ");

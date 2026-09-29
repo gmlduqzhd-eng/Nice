@@ -25,7 +25,7 @@ test("import rejects duplicate identities, unknown students, invalid dates and d
   assert.equal(parseWorkspace(invalidDate), null);
   assert.equal(parseWorkspace({ version: 1, students: {}, observations: [], drafts: [] }), null);
   assert.equal(parseWorkspace(null), null);
-  assert.equal(parseWorkspace({ ...createDemoWorkspace(), version: 2 }), null);
+  assert.equal(parseWorkspace({ ...createDemoWorkspace(), version: 99 }), null);
 });
 
 test("import strips unknown properties and returns independent nested arrays", () => {

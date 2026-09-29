@@ -120,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { error } = await client.auth.signOut({ scope: "local" });
       if (error) throw error;
-      if (mounted.current) setNotice("로그아웃했습니다. 이 브라우저의 연습 기록은 그대로 남아 있습니다.");
+      if (mounted.current) setNotice("로그아웃했습니다. 로그인 전 체험 공간으로 돌아갑니다. 계정 기록은 다음 로그인 시 다시 열 수 있습니다.");
     } catch (error) {
       if (mounted.current) setNotice(authErrorMessage(error, "signout"));
     } finally {
