@@ -11,6 +11,7 @@
 | `NEIS_API_KEY` | 서버 전용. 나이스 교육정보 개방 포털의 인증키 |
 | `NEXT_PUBLIC_SUPABASE_URL` | 연결할 Supabase 프로젝트 URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_`로 시작하는 공개 키 |
+| `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED` | Google 로그인 버튼 표시. 기본값 `false`이며 공급자 연결 검증 후에만 `true` |
 | `ENABLE_EXPERIMENTAL_COREPACK` | Vercel 빌드용. 값 `1`로 고정된 pnpm 11.19.0 사용 |
 
 Vercel `nice_helper_ys`에는 Supabase URL·공개 키와 Corepack 설정을 All Environments에 등록했습니다. 로컬 `.env.local`에도 Supabase 공개 설정을 별도로 작성했으며 Git에서 제외됩니다. Vercel 등록만으로 로컬 파일이 자동 생성되지는 않습니다. 나이스 인증키는 아직 등록하지 않았습니다.
@@ -64,7 +65,15 @@ type ErrorResponse = { error: string; code: string };
 
 ## Supabase 이메일 로그인
 
-현재 구현은 **이메일 매직 링크**입니다. `signInWithOtp`라는 SDK 메서드를 사용하지만 사용자는 이메일의 로그인 링크를 누릅니다. 소셜 OAuth 공급자는 구성하지 않았습니다.
+현재 기본 인증은 **이메일 매직 링크**입니다. 상단 ‘회원가입 · 로그인’ 또는 계정 화면의 ‘이메일로 시작하기’를 누르면 하나의 로그인 창이 열립니다. 이메일 입력 → 로그인 링크 받기 → 메일의 링크 클릭 순서이며 비밀번호·학교·이름을 추가로 받지 않습니다. `signInWithOtp`라는 SDK 메서드에 `shouldCreateUser: true`를 전달해 처음 사용하는 주소도 같은 요청으로 가입합니다. 숫자 인증번호 입력 UI는 없습니다.
+
+### 현재 메일 제공 범위
+
+기존 `Nice` 프로젝트는 기본 SMTP를 사용합니다. 이 방식은 **Supabase 조직 팀원 주소에만 메일을 보낼 수 있으므로 일반 교사 누구나 이메일로 가입할 수 있는 상태가 아닙니다.** 사용자 화면에 테스트 계정 제한을 표시하며 로그인 없이 기록 기능을 체험할 수 있게 했습니다. 일반 사용자에게 메일 로그인을 제공하려면 Custom SMTP를 구성하고 발송·수신을 검증해야 합니다. 가입 사용자를 늘리려고 교사에게 Supabase 관리 조직 권한을 부여하지 않습니다. [Supabase SMTP 제한](https://supabase.com/docs/guides/auth/auth-smtp)
+
+2026-09-29 대시보드에서 메일 템플릿 수정이 잠겨 있고 Custom SMTP 연결을 요구하는 상태를 확인했습니다. 2026-06-03부터 생성된 무료 프로젝트가 기본 SMTP를 사용하면 기본 템플릿을 변경할 수 없다는 정책에 해당합니다. 따라서 현재 배포의 로그인 방식은 기본 메일 링크이며, 템플릿에 숫자 토큰을 추가했다고 가정하지 않습니다. [이메일 템플릿 정책 변경](https://supabase.com/changelog/46599-changes-to-email-template-customisation-on-free-tier)
+
+### 앱 동작과 반환 주소
 
 현재 프로젝트는 Email 공급자가 활성화되어 있고 이메일 확인이 필요합니다. 2026-09-29 저장 후 다시 확인한 Site URL은 `https://nicehelperys.vercel.app`입니다. Redirect URLs에는 아래 세 주소 각각의 마지막 `/` 유무를 포함해 총 6개를 등록했습니다.
 
@@ -72,7 +81,7 @@ type ErrorResponse = { error: string; code: string };
 - `http://localhost:3000`
 - `http://127.0.0.1:3000`
 
-라이브 앱의 설정 화면에 로그인 입력란이 표시되는 것까지 확인했습니다. 이메일 전송·수신, 반환 세션 및 로그인한 사용자의 브라우저 백업 동작은 별도 확인이 필요합니다. 새 환경에서는 아래 절차를 따릅니다.
+로그인 요청 후 보낸 주소와 메일함 안내를 표시하며 같은 주소 재전송에는 60초 대기시간을 둡니다. 이메일 변경·창 닫기 후 늦게 완료된 요청은 해당 화면을 다시 바꾸지 않습니다. 이메일 입력값과 대기시간은 메모리에만 두고 가입 양식 값으로 영구 저장하지 않습니다. 인증 세션은 Supabase 클라이언트가 별도로 보관합니다. 실제 이메일 전송·수신, 반환 세션 및 로그인한 사용자의 원격 백업 동작은 별도 확인이 필요합니다. 테스트 대역을 사용한 검증과 실제 인증을 구분해 [검증 기록](VERIFICATION.md)에 남깁니다. 새 환경에서는 아래 절차를 따릅니다.
 
 1. 사용할 Supabase 개발 프로젝트를 정합니다. 프로젝트의 URL과 publishable key를 환경변수에 넣습니다.
 2. Authentication 설정에서 Email 공급자를 켭니다. 초대된 계정만 사용할지, 가입을 허용할지 운영 방침에 맞게 설정합니다. 초대 전용 운영이면 대시보드에서 계정을 준비하고 UI의 `shouldCreateUser` 설정도 맞춰야 합니다.
@@ -80,7 +89,15 @@ type ErrorResponse = { error: string; code: string };
 4. Redirect URLs에 로컬 및 배포본의 **실제 전체 반환 URL**을 등록합니다. 예: `http://localhost:3000/`, `http://127.0.0.1:3000/`, `https://선택한-프로젝트.vercel.app/`. 앱이 `window.location.origin`을 `emailRedirectTo`로 보내므로 포트가 다르면 그 포트도 추가합니다. 필요할 때 신뢰하는 Preview URL을 별도로 추가합니다.
 5. 초기 시험은 프로젝트 팀원 이메일로 진행합니다. 기본 SMTP는 전송 대상·횟수 제한이 있으므로 실제 사용자에게 제공할 때는 Custom SMTP를 구성하고 발신 도메인 및 전송을 검증합니다. [SMTP 설정](https://supabase.com/docs/guides/auth/auth-smtp)
 
-브라우저 클라이언트는 implicit flow로 반환 URL의 세션을 읽고 보관합니다. 서버에서 인증 쿠키를 읽는 SSR 보호 경로는 이 버전에 없습니다. 로그인 여부는 클라이언트 `getUser()`로 확인하고, DB 요청은 사용자 토큰과 RLS로 검사합니다. [이메일 인증](https://supabase.com/docs/guides/auth/auth-email-passwordless), [Redirect URL 설정](https://supabase.com/docs/guides/auth/redirect-urls), [브라우저 인증 흐름](https://supabase.com/docs/guides/auth/sessions/implicit-flow)
+브라우저 클라이언트는 implicit flow로 반환 URL의 세션을 읽고 보관합니다. `AuthProvider`가 앱 시작 시 초기화하므로 별도로 설정 화면을 열 필요가 없습니다. 반환 URL의 만료·거부 오류뿐 아니라 초기 토큰 확인 요청의 실패도 검사합니다. 실패하면 오류 설명과 세션·공급자 토큰 필드를 주소에서 지우고 새 로그인 링크를 받을 수 있도록 안내합니다. 관련 없는 query·hash 값은 유지합니다. `onAuthStateChange`에서는 상태만 바꾸며 다른 인증 호출을 기다리지 않습니다. 로그아웃은 현재 브라우저 세션에 적용하며 로컬 연습 자료는 남습니다.
+
+서버에서 인증 쿠키를 읽는 SSR 보호 경로는 이 버전에 없습니다. 초기 로그인 상태와 클라우드 저장 직전 사용자 신원은 `getUser()`로 확인하고, DB 요청은 사용자 토큰과 RLS로 검사합니다. [이메일 인증](https://supabase.com/docs/guides/auth/auth-email-passwordless), [Redirect URL 설정](https://supabase.com/docs/guides/auth/redirect-urls), [브라우저 인증 흐름](https://supabase.com/docs/guides/auth/sessions/implicit-flow)
+
+## Google 로그인 준비 상태
+
+Google 버튼과 `signInWithOAuth({ provider: "google" })` 연결 코드는 준비했습니다. 추가 Google 데이터 권한이나 오프라인 접근을 요청하지 않습니다. **현재 공급자는 미설정이고 `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED`는 기본 `false`이므로 버튼을 표시하지 않습니다.** 플래그만 켜도 Google 로그인 연결이 완료되는 것은 아닙니다.
+
+설정할 때는 [Google 로그인 연결 절차](GOOGLE_AUTH.md)의 실제 origin·callback 주소를 사용합니다. OAuth Client Secret은 사용자가 Supabase의 Google 공급자 설정에 직접 입력하며 소스, 채팅, 공개 환경변수에 넣지 않습니다. 연결 후 실제 로그인·로그아웃·가상 자료 백업을 검증한 뒤 해당 배포 환경의 플래그를 켜고 다시 배포합니다.
 
 ## 수동 저장용 스키마
 

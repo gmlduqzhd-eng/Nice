@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import type { User } from "@supabase/supabase-js";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Cloud, Download, HardDrive, LogOut, Mail, RotateCcw, Upload } from "lucide-react";
 import { parseWorkspace, type WorkspaceData } from "@/lib/domain";
 import { createDemoWorkspace } from "@/lib/demo";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
+import { useAuth } from "./auth-provider";
 
 type Props = {
   data: WorkspaceData;
@@ -19,13 +19,9 @@ function savedTime(value: string) {
 }
 
 export default function SettingsPanel({ data, onReplace, onToast }: Props) {
-  const [user, setUser] = useState<User | null>(null);
-  const [email, setEmail] = useState("");
-  const [authChecking, setAuthChecking] = useState(isSupabaseConfigured);
-  const [authBusy, setAuthBusy] = useState(false);
+  const { user, checking: authChecking, authBusy, openAuth, signOut } = useAuth();
   const [cloudBusy, setCloudBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
-  const [authMessage, setAuthMessage] = useState("");
   const [cloudMessage, setCloudMessage] = useState("");
   const [remoteUpdatedAt, setRemoteUpdatedAt] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -36,88 +32,32 @@ export default function SettingsPanel({ data, onReplace, onToast }: Props) {
   useEffect(() => {
     mounted.current = true;
     const client = getSupabase();
-    if (!client) return () => { mounted.current = false; };
-    let alive = true;
-    let authEventVersion = 0;
-    const applyUser = (nextUser: User | null) => {
-      if (!alive) return;
-      if (userIdRef.current !== (nextUser?.id ?? null)) {
-        accountRevision.current += 1;
-        userIdRef.current = nextUser?.id ?? null;
-        setRemoteUpdatedAt(null);
-        setCloudMessage("");
-        setCloudBusy(false);
-        setAuthMessage("");
-      }
-      setUser(nextUser);
-      setAuthChecking(false);
-    };
-    const { data: authListener } = client.auth.onAuthStateChange((_event, session) => {
-      authEventVersion += 1;
-      applyUser(session?.user ?? null);
-    });
-    const initialVersion = authEventVersion;
-    void client.auth.getUser().then(({ data: result, error }) => {
-      if (!alive || initialVersion !== authEventVersion) return;
-      applyUser(result.user);
-      if (error && error.name !== "AuthSessionMissingError") {
-        setAuthMessage("로그인 상태를 확인하지 못했습니다. 연결 상태를 확인하고 다시 로그인해 주세요.");
-      }
-    }).catch(() => {
-      if (!alive || initialVersion !== authEventVersion) return;
-      setAuthChecking(false);
-      setAuthMessage("로그인 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-    });
+    const { data: listener } = client?.auth.onAuthStateChange((_event, session) => {
+      const nextId = session?.user?.id ?? null;
+      if (userIdRef.current === nextId) return;
+      // Invalidate pending cloud responses immediately, before React renders a new account.
+      accountRevision.current += 1;
+      userIdRef.current = nextId;
+      setRemoteUpdatedAt(null);
+      setCloudMessage("");
+      setCloudBusy(false);
+    }) ?? { data: null };
     return () => {
-      alive = false;
       mounted.current = false;
       accountRevision.current += 1;
-      authListener.subscription.unsubscribe();
+      listener?.subscription.unsubscribe();
     };
   }, []);
 
-  async function signIn(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const client = getSupabase();
-    if (!client || authBusy || !email.trim()) return;
-    setAuthBusy(true);
-    setAuthMessage("");
-    try {
-      const { error } = await client.auth.signInWithOtp({
-        email: email.trim(),
-        options: { emailRedirectTo: window.location.origin },
-      });
-      if (error) throw error;
-      if (!mounted.current) return;
-      setAuthMessage("로그인 메일을 요청했습니다. 메일함에서 링크를 열어 주세요. 메일이 없으면 스팸함을 확인해 주세요.");
-      onToast("로그인 메일을 요청했습니다.");
-    } catch {
-      if (!mounted.current) return;
-      setAuthMessage("로그인 메일을 요청하지 못했습니다. 이메일 주소와 서비스의 메일 설정을 확인해 주세요.");
-      onToast("로그인 메일 요청에 실패했습니다.");
-    } finally {
-      if (mounted.current) setAuthBusy(false);
-    }
-  }
-
-  async function signOut() {
-    const client = getSupabase();
-    if (!client || authBusy || cloudBusy) return;
-    setAuthBusy(true);
-    try {
-      const { error } = await client.auth.signOut({ scope: "local" });
-      if (error) throw error;
-      if (mounted.current) onToast("로그아웃했습니다. 이 브라우저의 연습 기록은 유지됩니다.");
-    } catch {
-      if (mounted.current) {
-        setAuthMessage("로그아웃하지 못했습니다. 연결 상태를 확인하고 다시 시도해 주세요.");
-        onToast("로그아웃에 실패했습니다.");
-      }
-    } finally {
-      if (mounted.current) setAuthBusy(false);
-    }
-  }
-
+  useEffect(() => {
+    const nextId = user?.id ?? null;
+    if (userIdRef.current === nextId) return;
+    accountRevision.current += 1;
+    userIdRef.current = nextId;
+    setRemoteUpdatedAt(null);
+    setCloudMessage("");
+    setCloudBusy(false);
+  }, [user?.id]);
   async function syncCloud(direction: "upload" | "download") {
     const client = getSupabase();
     if (!client || !user || cloudBusy) return;
@@ -234,22 +174,9 @@ export default function SettingsPanel({ data, onReplace, onToast }: Props) {
         <p>이 버전은 업무 흐름을 검증하는 시제품입니다. 실제 학생 정보의 저장·전송은 학교의 운영 기준을 확인한 뒤 도입합니다.</p>
       </div>
 
-      <section className="card stack" aria-labelledby="local-backup-title">
-        <div className="section-heading">
-          <div><span className="badge"><HardDrive size={14} aria-hidden="true" /> 이 브라우저</span><h2 id="local-backup-title">연습 기록 백업</h2></div>
-        </div>
-        <p className="muted">현재 기록은 이 기기의 브라우저에 저장됩니다. 브라우저 데이터를 삭제하면 사라질 수 있으니, 필요한 기록을 파일로 보관해 주세요.</p>
-        <div className="row">
-          <button type="button" className="button secondary" onClick={exportBackup}><Download size={16} aria-hidden="true" /> JSON 백업 내려받기</button>
-          <button type="button" className="button secondary" onClick={() => fileInput.current?.click()} disabled={importBusy || cloudBusy}><Upload size={16} aria-hidden="true" /> {importBusy ? "백업 읽는 중…" : "JSON 백업 불러오기"}</button>
-          <input ref={fileInput} type="file" accept=".json,application/json" hidden aria-label="JSON 백업 파일 선택" onChange={importBackup} />
-        </div>
-        <p className="muted">지원 형식: 이 앱에서 내보낸 JSON · 최대 1MB · 불러오기 전 교체 여부를 확인합니다.</p>
-      </section>
-
       <section className="card stack" aria-labelledby="cloud-title">
         <div className="section-heading">
-          <div><span className="badge"><Cloud size={14} aria-hidden="true" /> 선택 기능</span><h2 id="cloud-title">계정과 클라우드 백업</h2></div>
+          <div><span className="badge"><Cloud size={14} aria-hidden="true" /> 선택 기능</span><h2 id="cloud-title">내 계정 · 백업</h2></div>
           <span className="badge">{!isSupabaseConfigured ? "연결 준비 중" : authChecking ? "로그인 확인 중" : user ? "로그인됨" : "로그인 필요"}</span>
         </div>
         <p className="muted">로그인한 계정에 연습 기록을 직접 저장하고 불러옵니다. 버튼을 눌렀을 때만 자료를 전송하며 자동 동기화하지 않습니다.</p>
@@ -272,13 +199,25 @@ export default function SettingsPanel({ data, onReplace, onToast }: Props) {
             <p className="muted">이 브라우저의 연습 기록은 계정을 바꾸거나 로그아웃해도 남아 있습니다.</p>
           </div>
         ) : (
-          <form className="stack" onSubmit={signIn}>
-            <label className="field" htmlFor="login-email">이메일 주소<input id="login-email" className="input" type="email" autoComplete="email" placeholder="teacher@example.com" required maxLength={254} value={email} onChange={event => setEmail(event.target.value)} disabled={authBusy} /></label>
-            <div><button className="button primary" type="submit" disabled={authBusy}><Mail size={16} aria-hidden="true" /> {authBusy ? "요청 중…" : "이메일로 로그인 링크 받기"}</button></div>
-          </form>
+          <div className="stack">
+            <p className="muted">이메일을 입력하고 메일의 링크를 누르면 끝. 처음이라면 회원가입도 함께 진행됩니다.</p>
+            <div><button className="button primary" type="button" onClick={openAuth}><Mail size={16} aria-hidden="true" /> 이메일로 시작하기</button></div>
+          </div>
         )}
-        {authMessage && <p className="notice" role="status">{authMessage}</p>}
         {cloudMessage && <p className="notice" role="status">{cloudMessage}</p>}
+      </section>
+
+      <section className="card stack" aria-labelledby="local-backup-title">
+        <div className="section-heading">
+          <div><span className="badge"><HardDrive size={14} aria-hidden="true" /> 이 브라우저</span><h2 id="local-backup-title">연습 기록 백업</h2></div>
+        </div>
+        <p className="muted">현재 기록은 이 기기의 브라우저에 저장됩니다. 브라우저 데이터를 삭제하면 사라질 수 있으니, 필요한 기록을 파일로 보관해 주세요.</p>
+        <div className="row">
+          <button type="button" className="button secondary" onClick={exportBackup}><Download size={16} aria-hidden="true" /> JSON 백업 내려받기</button>
+          <button type="button" className="button secondary" onClick={() => fileInput.current?.click()} disabled={importBusy || cloudBusy}><Upload size={16} aria-hidden="true" /> {importBusy ? "백업 읽는 중…" : "JSON 백업 불러오기"}</button>
+          <input ref={fileInput} type="file" accept=".json,application/json" hidden aria-label="JSON 백업 파일 선택" onChange={importBackup} />
+        </div>
+        <p className="muted">지원 형식: 이 앱에서 내보낸 JSON · 최대 1MB · 불러오기 전 교체 여부를 확인합니다.</p>
       </section>
 
       <section className="card stack" aria-labelledby="reset-title">

@@ -18,3 +18,28 @@
 .demo-notice,.demo-notice button,.notice,.notice.subtle{color:#596d8d}.demo-badge{color:#4761a7}.orange-text,.table-check.needs-check{color:#9c652d}.issue-label.warning{color:#995821}.issue-label.info{color:#45629f}.status-draft{color:#616e84}.status-reviewed{color:#4d68a5}.status-copied{color:#75618e}.status-confirmed{color:#387456}.neutral{color:#62738f}.avatar,.avatar-1{color:#4e6b9e}.avatar-2{color:#906937}.avatar-3{color:#75638c}.avatar-0{color:#4b7a5e}.progress-ring span span,.progress-summary,.small-tag.light{color:#6074a3}.progress-card>button{color:#4b63a0}.search-box input::placeholder{color:#72809a}.nav-caption{color:#8c9cb7}.class-switch div>span,.profile div>span{color:#95a6bf}.workflow-steps>div>span{color:#63718a}.workflow-steps>div.done{color:#4964af}.workflow-steps>div.done>span{color:#4964af}.empty-state strong,.empty-state p{color:#63718a}.evidence-panel>.row>.muted{color:#63718a}
 .segmented button.selected{color:#3b5cbd}.avatar-2{color:#86612e}.avatar-0{color:#416e53}.progress-ring span span,.progress-summary,.small-tag.light{color:#536690}.student-list-item.selected small{color:#58677f}.editor-tabs>button{color:#63718a}.editor-tabs>button.active{color:#4565bd}.neutral{color:#596982}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* A short path from the first visit to a useful teaching record. */
+.account-button{min-height:40px;white-space:nowrap;padding:9px 15px!important}
+.quick-guide{margin:0 0 24px;padding:22px;border:1px solid #d9e3fc;border-radius:14px;background:linear-gradient(115deg,#f0f5ff,#fff)}
+.quick-guide-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.quick-guide-heading h2{font-size:20px;color:#233956;letter-spacing:-.6px;margin:5px 0 7px}
+.quick-guide-heading p{font-size:13px;line-height:1.8;color:#62728c}
+.quick-guide-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px}
+.quick-guide-actions>button{border:1px solid #e0e7f5;border-radius:10px;background:#fff;display:flex;align-items:center;gap:11px;text-align:left;padding:15px;min-width:0;transition:border-color .15s,box-shadow .15s}
+.quick-guide-actions>button:hover{border-color:#718eeb;box-shadow:0 3px 14px #274dbc10}
+.quick-guide-actions>button>span:nth-child(2){flex:1;min-width:0}
+.quick-guide-actions>button>svg{color:#7489b6;flex-shrink:0}
+.quick-guide-actions strong{display:block;font-size:14px;color:#304562;font-weight:650}
+.quick-guide-actions small{display:block;font-size:12px;line-height:1.7;color:#62728c;margin-top:4px;word-break:keep-all}
+.quick-guide-icon{display:grid;place-items:center;width:37px;height:37px;border-radius:10px;background:#edf2ff;color:#5473d8;flex-shrink:0}
+.guide-toggle{display:flex;justify-content:flex-end;margin:-8px 0 15px}
+.guide-toggle button{min-height:34px;font-size:12px}
+.app-footer{align-items:flex-start;flex-wrap:wrap;line-height:1.8}
+.app-footer small{display:block;font-size:11px;margin-top:3px;color:#63718a}
+.copyright-details{position:relative;font-size:12px}
+.copyright-details summary{cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.copyright-details p{max-width:370px;margin-top:10px;font-size:12px;line-height:1.9}
+.modal-actions{flex-wrap:wrap}
+@media(max-width:1250px){.quick-guide-actions{grid-template-columns:1fr}.quick-guide-actions>button{padding:12px 15px}.quick-guide-actions small{margin-top:2px}}
+@media(max-width:520px){.topbar{gap:8px}.breadcrumb{min-width:0}.breadcrumb strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:125px}.account-button{font-size:12px!important;padding:8px 10px!important}.quick-guide{padding:17px}.quick-guide-heading h2{font-size:18px}.quick-guide-heading p{font-size:12px}.quick-guide-actions{gap:8px}.quick-guide-actions strong{font-size:13px}.quick-guide-actions small{font-size:11px}.observation-dialog .modal-actions .button{font-size:12px;padding:10px}.app-footer{gap:12px}.app-footer>span:last-child{width:100%}}

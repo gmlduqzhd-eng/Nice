@@ -6,6 +6,9 @@ import { addObservation, deleteObservation, editObservation, getIssues, parseWor
 import { createDemoWorkspace } from '@/lib/demo';
 import SettingsPanel from './settings-panel';
 import SchoolPanel from './school-panel';
+import { AuthProvider, useAuth } from './auth-provider';
+import GettingStarted from './getting-started';
+import { COPYRIGHT } from '@/lib/site';
 
 type View = 'dashboard' | 'observations' | 'workbench' | 'school' | 'settings';
 type SetWorkspace = (update: WorkspaceData | ((current: WorkspaceData) => WorkspaceData)) => void;
@@ -25,6 +28,11 @@ function Avatar({ number, size = '' }: { number: number; size?: string }) {
 function Status({ value }: { value: Draft['status'] }) { return <span className={`badge status-${value}`}>{value === 'confirmed' && <Check size={12} />}{STATUS[value]}</span>; }
 
 export default function TeacherApp() {
+  return <AuthProvider><TeacherWorkspace /></AuthProvider>;
+}
+
+function TeacherWorkspace() {
+  const { user, checking, openAuth } = useAuth();
   const [data, setDataState] = useState<WorkspaceData>(createDemoWorkspace);
   const dataRef = useRef(data);
   // Keep a synchronous current snapshot so asynchronous clipboard completions
@@ -108,12 +116,13 @@ export default function TeacherApp() {
     </aside>
     {mobileMenu && <button aria-label="메뉴 닫기" className="menu-scrim" onClick={() => setMobileMenu(false)} />}
     <div className="main-shell">
-      <header className="topbar"><div className="breadcrumb"><button className="icon-button mobile-only" aria-label="메뉴 열기" onClick={() => setMobileMenu(true)}><Menu size={21}/></button><span>나의 업무 공간</span><ChevronRight size={14}/><strong>{NAV.find(n => n.id === view)?.label ?? '설정 및 백업'}</strong></div><div className="topbar-right"><span className="save-state"><span/> {ready ? storageBlocked ? '자동 저장 일시 중지' : storageError ? '저장 상태 확인 필요' : '이 브라우저에 저장' : '자료 불러오는 중'}</span><span className="demo-badge">가상 데이터 체험</span></div></header>
+      <header className="topbar"><div className="breadcrumb"><button className="icon-button mobile-only" aria-label="메뉴 열기" onClick={() => setMobileMenu(true)}><Menu size={21}/></button><span>나의 업무 공간</span><ChevronRight size={14}/><strong>{NAV.find(n => n.id === view)?.label ?? '설정 및 백업'}</strong></div><div className="topbar-right"><span className="save-state"><span/> {ready ? storageBlocked ? '자동 저장 일시 중지' : storageError ? '저장 상태 확인 필요' : '이 브라우저에 저장' : '자료 불러오는 중'}</span><button type="button" className={`button ${user ? 'secondary' : 'primary'} account-button`} onClick={() => user ? navigate('settings') : openAuth()} disabled={checking}>{checking ? '로그인 확인 중' : user ? '내 계정' : '회원가입 · 로그인'}</button></div></header>
       <main id="main-content">
         <div className="demo-notice"><ShieldCheck size={16}/><span>가상 학생으로 이용하는 첫 버전입니다. 실제 학생 개인정보는 입력하지 마세요.</span><button onClick={() => navigate('settings')}>저장 방식 확인 <ChevronRight size={14}/></button></div>
         {storageError && <div role="alert" className="notice error"><span>{storageError}</span>{recoveryRaw !== null && <button className="text-button" onClick={downloadRecovery}><Download size={16}/>복구 사본 다운로드</button>}</div>}
         {view === 'dashboard' && <>
           <div className="page-heading"><div><div className="eyebrow">2026학년도 2학기 · 예시 학급</div><h1>선생님, 오늘도 반갑습니다 <span className="greeting-dot"/></h1><p>기록은 차곡차곡, 마무리는 빠짐없이. 우리 반 업무를 확인해 보세요.</p></div><button className="button primary" onClick={() => setModal('new')}><Plus size={18}/>관찰 기록 추가</button></div>
+          <GettingStarted onRecord={() => setModal('new')} onPrepare={() => navigate('workbench')} onBackup={() => navigate('settings')} />
           <div className="stats-grid">
             <button className="stat-card" onClick={() => { setFilter('all'); document.getElementById('issues')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}><span className="stat-top">확인이 필요한 항목 <span className="stat-icon orange"><AlertCircle size={18}/></span></span><span className="stat-value">{issues.length}<small>건</small></span><span className="stat-caption"><span className="orange-text">누락 · 검토 필요</span> 항목을 확인해 주세요</span></button>
             <button className="stat-card" onClick={() => navigate('observations')}><span className="stat-top">쌓인 관찰 기록 <span className="stat-icon blue"><NotebookPen size={18}/></span></span><span className="stat-value">{data.observations.length}<small>개</small></span><span className="stat-caption">우리 반 {data.students.length}명의 배움과 성장</span></button>
@@ -138,26 +147,49 @@ export default function TeacherApp() {
           <div className="workbench-layout"><aside className="card student-list"><div className="card-heading"><h2>우리 반 학생 <span className="count-label">{data.students.length}</span></h2></div>{data.students.map(s=>{const d=data.drafts.find(d=>d.studentId===s.id);return <button key={s.id} className={`student-list-item ${selectedStudent?.id===s.id?'selected':''}`} onClick={()=>setSelected(s.id)}><Avatar number={s.number}/><span><strong>{s.name}</strong><small>{d?STATUS[d.status]:'작성 전'}</small></span>{issues.some(i=>i.studentId===s.id)?<span className="attention-dot"/>:<Check size={16}/>}</button>;})}</aside>{selectedStudent && <DraftEditor key={selectedStudent.id} data={data} studentId={selectedStudent.id} setData={setData} notify={notify} onAdd={()=>{setSelected(selectedStudent.id);setModal('new');}}/>}</div>
         </>}
         {view === 'school' && <><div className="page-heading"><div><div className="eyebrow">나이스 교육정보 개방 포털</div><h1>학교 · 학사일정</h1><p>학교를 검색해 공개된 학사일정을 확인하세요.</p></div></div><SchoolPanel onToast={notify}/></>}
-        {view === 'settings' && <><div className="page-heading"><div><div className="eyebrow">나의 업무 공간 관리</div><h1>설정 및 백업</h1><p>자료를 백업하고, 준비된 계정으로 클라우드 저장을 연결하세요.</p></div></div><SettingsPanel data={data} onReplace={replaceData} onToast={notify}/></>}
-        <footer className="app-footer"><span>담임노트 <b>·</b> 선생님의 기록에 여유를 더합니다.</span><span>v0.1 · 가상 학급 체험판</span></footer>
+        {view === 'settings' && <><div className="page-heading"><div><div className="eyebrow">나의 업무 공간 관리</div><h1>설정 및 백업</h1><p>내 기록을 파일로 보관하거나, 로그인한 계정에 직접 저장하세요.</p></div></div><SettingsPanel data={data} onReplace={replaceData} onToast={notify}/></>}
+        <footer className="app-footer"><div><span>담임노트 <b>·</b> 선생님의 기록에 여유를 더합니다.</span><small>{COPYRIGHT}</small></div><details className="copyright-details"><summary>저작권 안내</summary><p>{COPYRIGHT}<br/>오픈소스 구성요소에는 각 프로젝트의 라이선스가 적용됩니다. 선생님이 직접 작성한 기록은 서비스의 저작권 표기 대상에 포함되지 않습니다.</p></details><span>v0.2 · 가상 학급 체험판</span></footer>
       </main>
     </div>
     {toast && <div role="status" className="toast"><CircleCheck size={18}/>{toast}<button aria-label="알림 닫기" onClick={()=>setToast('')}><X size={15}/></button></div>}
-    {modal && <ObservationDialog data={data} initial={modal === 'new' ? undefined : modal} selectedId={selectedStudent?.id} onClose={()=>setModal(null)} onSave={(o)=>{setData(current=>modal==='new'?addObservation(current,o):editObservation(current,o.id,{date:o.date,category:o.category,content:o.content}));setModal(null);notify('관찰 기록을 저장했습니다.');}}/>}
+    {modal && <ObservationDialog data={data} initial={modal === 'new' ? undefined : modal} selectedId={selectedStudent?.id} onClose={()=>setModal(null)} onSave={(o, keepOpen)=>{setData(current=>modal==='new'?addObservation(current,o):editObservation(current,o.id,{date:o.date,category:o.category,content:o.content}));if(!keepOpen)setModal(null);notify(keepOpen ? '저장했습니다. 다음 학생의 기록을 이어서 남겨 주세요.' : '관찰 기록을 저장했습니다.');}}/>}
   </div>;
 }
 
-function ObservationDialog({data,initial,selectedId,onClose,onSave}:{data:WorkspaceData;initial?:Observation;selectedId?:string;onClose:()=>void;onSave:(o:Observation)=>void}) {
-  const dialog=useRef<HTMLDialogElement>(null);
-  const [studentId,setStudentId]=useState(initial?.studentId??selectedId??data.students[0]?.id??'');
-  const [date,setDate]=useState(()=>initial?.date??localToday());
-  const [category,setCategory]=useState(initial?.category??'행동 관찰');
-  const [content,setContent]=useState(initial?.content??'');
-  const [error,setError]=useState('');
+function ObservationDialog({data,initial,selectedId,onClose,onSave}:{data:WorkspaceData;initial?:Observation;selectedId?:string;onClose:()=>void;onSave:(o:Observation,keepOpen?:boolean)=>void}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const contentInput = useRef<HTMLTextAreaElement>(null);
+  const [studentId,setStudentId] = useState(initial?.studentId??selectedId??data.students[0]?.id??'');
+  const [date,setDate] = useState(()=>initial?.date??localToday());
+  const [category,setCategory] = useState(initial?.category??'행동 관찰');
+  const [content,setContent] = useState(initial?.content??'');
+  const [error,setError] = useState('');
   useEffect(()=>{dialog.current?.showModal();},[]);
-  return <dialog ref={dialog} className="observation-dialog" aria-labelledby="observation-dialog-title" onCancel={onClose}><form onSubmit={e=>{e.preventDefault();try {onSave({id:initial?.id??crypto.randomUUID(),studentId,date,category,content:content.trim()});}catch(err){setError(err instanceof Error?err.message:'기록을 저장하지 못했습니다.');}}}><div className="modal-heading"><div><span className="eyebrow">관찰 노트</span><h2 id="observation-dialog-title">{initial?'관찰 기록 수정':'오늘의 순간을 기록하세요'}</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="닫기"><X size={22}/></button></div><div className="form-grid"><label className="field">학생<select value={studentId} onChange={e=>setStudentId(e.target.value)} disabled={!!initial}>{data.students.map(s=><option value={s.id} key={s.id}>{s.number}번 {s.name}</option>)}</select></label><label className="field">관찰 날짜<input type="date" required value={date} onChange={e=>setDate(e.target.value)}/></label></div><label className="field">기록 분류<select value={category} onChange={e=>setCategory(e.target.value)}>{Array.from(new Set(['행동 관찰','국어','수학','사회','과학','창의적 체험활동',category])).map(c=><option key={c}>{c}</option>)}</select></label><label className="field">관찰한 내용<textarea rows={5} required minLength={2} maxLength={2000} value={content} onChange={e=>setContent(e.target.value)} placeholder="예: 모둠 토의에서 친구의 의견을 정리하고 발표 순서를 제안함."/></label><p className="input-help">직접 관찰한 행동과 상황을 구체적으로 남겨 주세요. {content.length}/2,000자</p>{initial&&<div className="notice">수정하면 연결된 문장의 검토 상태가 ‘작성 중’으로 바뀝니다.</div>}{error&&<p role="alert" className="error-text">{error}</p>}<div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>취소</button><button type="submit" className="button primary"><Check size={17}/>기록 저장</button></div></form></dialog>;
+  function save(keepOpen: boolean) {
+    try {
+      onSave({id:initial?.id??crypto.randomUUID(),studentId,date,category,content:content.trim()},keepOpen);
+      if(keepOpen) {
+        const index = data.students.findIndex(student=>student.id===studentId);
+        setStudentId(data.students[(index+1)%data.students.length]?.id??studentId);
+        setContent('');
+        setError('');
+        contentInput.current?.focus();
+      }
+    } catch(err) { setError(err instanceof Error?err.message:'기록을 저장하지 못했습니다.'); }
+  }
+  return <dialog ref={dialog} className="observation-dialog" aria-labelledby="observation-dialog-title" onCancel={onClose}>
+    <form onSubmit={event=>{event.preventDefault();const submitter=(event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement|null;save(submitter?.value==='next');}}>
+      <div className="modal-heading"><div><span className="eyebrow">관찰 노트</span><h2 id="observation-dialog-title">{initial?'관찰 기록 수정':'오늘의 순간을 기록하세요'}</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="닫기"><X size={22}/></button></div>
+      <div className="form-grid"><label className="field">학생<select value={studentId} onChange={event=>setStudentId(event.target.value)} disabled={!!initial}>{data.students.map(student=><option value={student.id} key={student.id}>{student.number}번 {student.name}</option>)}</select></label><label className="field">관찰 날짜<input type="date" required value={date} onChange={event=>setDate(event.target.value)}/></label></div>
+      <label className="field">기록 분류<select value={category} onChange={event=>setCategory(event.target.value)}>{Array.from(new Set(['행동 관찰','국어','수학','사회','과학','창의적 체험활동',category])).map(value=><option key={value}>{value}</option>)}</select></label>
+      <label className="field">관찰한 내용<textarea ref={contentInput} rows={5} required minLength={2} maxLength={2000} value={content} onChange={event=>setContent(event.target.value)} placeholder="언제, 어떤 활동에서, 무엇을 했는지 한 줄로 남겨 주세요."/></label>
+      <p className="input-help">직접 관찰한 행동을 남겨 주세요. 예: 모둠 토의에서 친구의 의견을 정리하고 발표 순서를 제안함.</p><p className="input-help">{content.length}/2,000자{!initial && data.students.length > 1 && ' · 여러 학생을 기록할 때는 ‘저장하고 다음 학생’을 누르세요.'}</p>
+      {initial&&<div className="notice">수정하면 연결된 문장의 검토 상태가 ‘작성 중’으로 바뀝니다.</div>}
+      {error&&<p role="alert" className="error-text">{error}</p>}
+      <div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>취소</button>{!initial&&data.students.length>1&&<button type="submit" value="next" className="button secondary">저장하고 다음 학생</button>}<button type="submit" value="done" className="button primary"><Check size={17}/>기록 저장</button></div>
+    </form>
+  </dialog>;
 }
-
 function DraftEditor({data,studentId,setData,notify,onAdd}:{data:WorkspaceData;studentId:string;setData:SetWorkspace;notify:(s:string)=>void;onAdd:()=>void}){
   const student=data.students.find(s=>s.id===studentId)!;
   const draft=data.drafts.find(d=>d.studentId===studentId);

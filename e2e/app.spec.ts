@@ -27,8 +27,14 @@ test("업무 화면과 주요 메뉴가 오류 없이 열린다", async ({ page 
   for (const menu of ["관찰 노트", "나이스 입력 준비", "학교 · 학사일정", "설정 및 백업"]) {
     await navigate(page, menu);
   }
-  await expect(page.getByText("Supabase가 아직 연결되지 않았습니다.", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "클라우드 연결 대기" })).toBeDisabled();
+  const cloudWaiting = page.getByRole("button", { name: "클라우드 연결 대기", exact: true });
+  const emailStart = page.getByRole("button", { name: "이메일로 시작하기", exact: true });
+  await expect(cloudWaiting.or(emailStart)).toBeVisible();
+  if (await cloudWaiting.isVisible()) {
+    await expect(cloudWaiting).toBeDisabled();
+  } else {
+    await expect(emailStart).toBeEnabled();
+  }
   await expect(page.locator("[data-nextjs-dialog], .vite-error-overlay")).toHaveCount(0);
   expect(errors).toEqual([]);
 });
@@ -53,6 +59,70 @@ test("관찰 기록 추가 결과와 학생 연결이 새로고침 후에도 유
   await expect(page.getByRole("button", { name: /쌓인 관찰 기록/ })).toContainText("13");
   await navigate(page, "관찰 노트");
   await expect(page.getByRole("article").filter({ hasText: content })).toContainText("오해솔");
+});
+
+test("첫 사용 안내에서 학생별 기록을 이어 쓰면 날짜·분류를 유지하고 한 건씩 저장한다", async ({ page }) => {
+  await expect(page.getByRole("heading", { name: "하루 한 줄부터 시작해 보세요.", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /첫 관찰 남기기/ }).click();
+  const dialog = page.getByRole("dialog");
+  const student = dialog.getByRole("combobox", { name: "학생", exact: true });
+  const category = dialog.getByRole("combobox", { name: "기록 분류", exact: true });
+  const date = dialog.getByLabel("관찰 날짜", { exact: true });
+  const content = dialog.getByRole("textbox", { name: "관찰한 내용", exact: true });
+  await student.selectOption({ label: "7번 백아람" });
+  await category.selectOption("과학");
+  await date.fill("2026-09-28");
+  const firstContent = "식물의 잎을 관찰하고 모양의 공통점을 찾아 비교 표에 정리함.";
+  const secondContent = "식물의 잎을 관찰하며 잎맥을 그림으로 나타내고 발견한 점을 설명함.";
+  await content.fill(firstContent);
+  await dialog.getByRole("button", { name: "저장하고 다음 학생", exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await expect(student).toHaveValue("student-8");
+  await expect(category).toHaveValue("과학");
+  await expect(date).toHaveValue("2026-09-28");
+  await expect(content).toHaveValue("");
+  await expect(content).toBeFocused();
+  await expect(page.getByRole("button", { name: /쌓인 관찰 기록/ })).toContainText("13");
+  // An accidental second click with no new content must not duplicate the first record.
+  await dialog.getByRole("button", { name: "저장하고 다음 학생", exact: true }).click();
+  await expect(student).toHaveValue("student-8");
+  await expect(page.getByRole("button", { name: /쌓인 관찰 기록/ })).toContainText("13");
+  await content.fill(secondContent);
+  await dialog.getByRole("button", { name: "기록 저장", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole("button", { name: /쌓인 관찰 기록/ })).toContainText("14");
+  await page.reload();
+  await navigate(page, "관찰 노트");
+  for (const [text, name] of [[firstContent, "백아람"], [secondContent, "오해솔"]]) {
+    const record = page.getByRole("article").filter({ hasText: text });
+    await expect(record).toHaveCount(1);
+    await expect(record).toContainText(name);
+    await expect(record).toContainText("과학");
+    await expect(record).toContainText("2026.09.28");
+  }
+  await expect(page.getByText("총 14개의 기록", { exact: true })).toBeVisible();
+});
+
+test("사용 안내를 접은 상태가 유지되고 저작권 안내를 열어 확인할 수 있다", async ({ page }) => {
+  const heading = page.getByRole("heading", { name: "하루 한 줄부터 시작해 보세요.", exact: true });
+  await page.getByRole("button", { name: /입력 문장 준비하기/ }).click();
+  await expect(page.getByRole("heading", { name: "나이스 입력 준비", exact: true, level: 1 })).toBeVisible();
+  await page.getByRole("navigation", { name: "주 메뉴" }).getByRole("button", { name: /^업무 한눈에/ }).click();
+  await expect(page.getByRole("heading", { name: "선생님, 오늘도 반갑습니다", level: 1 })).toBeVisible();
+  await page.getByRole("button", { name: /내 기록 보관하기/ }).click();
+  await expect(page.getByRole("heading", { name: "설정 및 백업", exact: true, level: 1 })).toBeVisible();
+  await page.getByRole("navigation", { name: "주 메뉴" }).getByRole("button", { name: /^업무 한눈에/ }).click();
+  await page.getByRole("button", { name: "사용 안내 접기", exact: true }).click();
+  await expect(heading).not.toBeVisible();
+  await page.reload();
+  await expect(heading).not.toBeVisible();
+  await page.getByRole("button", { name: "사용 안내 다시 보기", exact: true }).click();
+  await expect(heading).toBeVisible();
+  const footer = page.locator("footer.app-footer");
+  await footer.scrollIntoViewIfNeeded();
+  await expect(footer.locator("small")).toHaveText("© 2026 담임노트. All rights reserved.");
+  await footer.getByText("저작권 안내", { exact: true }).click();
+  await expect(footer.getByText(/선생님이 직접 작성한 기록은 서비스의 저작권 표기 대상에 포함되지 않습니다/)).toBeVisible();
 });
 
 test("반영 확인한 문장을 수정하면 검토 상태가 초기화된다", async ({ page }) => {
