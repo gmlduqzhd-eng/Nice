@@ -72,9 +72,12 @@
 - Supabase Google 공급자에 공개 Client ID만 저장한 뒤 공개 Auth 설정의 `external.google=true`를 확인했습니다. nonce 검사 생략 및 이메일 없는 사용자 허용은 꺼진 상태를 유지했습니다.
 - Google 활성화 빌드에서 단위/API 테스트 31개와 타입 검사·빌드가 통과했습니다. `/privacy`, `/terms`가 정적 페이지로 생성됐습니다.
 - 인증 시나리오 9개와 업무 시나리오 12개가 통과했습니다. 업무 시나리오 1개는 변경된 로그인 버튼 문구에 선택자를 맞춘 뒤 재실행해 통과했습니다.
+- Google 비활성 개발 서버에서는 인증 시나리오 7개가 통과했고 Google 전용 2개는 명시적으로 제외했습니다. SDK 요청이 발생하지 않는 것도 확인했습니다. 검증용 3001 서버는 종료했습니다.
 - 외부 Google·Supabase 인증 요청은 모의 응답을 사용했습니다. 이 결과는 실제 Google 인증 또는 원격 백업 성공과 구분합니다.
 - 개인정보처리방침·이용약관을 로그인 전에도 읽을 수 있게 연결했습니다. 데스크톱과 390px 모바일에서 확인했고, 안내 표의 가로 넘침을 수정해 페이지 너비를 초과하지 않음을 확인했습니다.
-- Vercel Production에 Google 공개 Client ID 및 표시 플래그를 저장했습니다. 이 절 작성 시점에는 새 운영 배포·실제 로그인 검증이 진행 중입니다.
+- Vercel Production에 Google 공개 Client ID 및 표시 플래그를 저장했습니다. 코드 커밋 `d4bd638`의 intended `nice_helper_ys` 배포가 Ready인 것을 확인했고, 실제 운영 주소에서 한국어 Google 공식 버튼 표시를 확인했습니다.
+- `/privacy`, `/terms`의 무인증 운영 HTTP 200 및 페이지 제목을 확인했습니다. Google Branding에 홈페이지·개인정보처리방침·이용약관 주소를 저장한 뒤 성공 알림을 확인했습니다.
+- Google Audience의 ‘앱 게시’ 버튼이 활성화됐으나 아직 Testing 상태입니다. 실제 Google 버튼 클릭 단계에서 Chrome 연결이 끊겼습니다. 최종 계정 선택·Google 인증·원격 백업 및 Google 앱 게시 전환은 미확인 상태이며 브라우저 재연결 후 이어서 검증해야 합니다.
 
 ## GitHub·Vercel·Supabase 연결 확인
 
