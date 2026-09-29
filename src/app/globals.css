@@ -62,3 +62,9 @@
 .modal-actions{flex-wrap:wrap}
 @media(max-width:1250px){.quick-guide-actions{grid-template-columns:1fr}.quick-guide-actions>button{padding:12px 15px}.quick-guide-actions small{margin-top:2px}}
 @media(max-width:520px){.topbar{gap:8px}.breadcrumb{min-width:0}.breadcrumb strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:125px}.account-button{font-size:12px!important;padding:8px 10px!important}.quick-guide{padding:17px}.quick-guide-heading h2{font-size:18px}.quick-guide-heading p{font-size:12px}.quick-guide-actions{gap:8px}.quick-guide-actions strong{font-size:13px}.quick-guide-actions small{font-size:11px}.observation-dialog .modal-actions .button{font-size:12px;padding:10px}.app-footer{gap:12px}.app-footer>span:last-child{width:100%}}
+/* NEIS assistant: independent practice page and readable setup steps. */
+.helper-steps { padding-left: 24px; line-height: 1.8; }
+.helper-steps li + li { margin-top: 8px; }
+.practice-page { max-width: 940px; padding: 40px 24px; margin: 0 auto; }
+.practice-context { justify-content: flex-start; flex-wrap: wrap; gap: 24px; }
+.practice-saved { white-space: pre-wrap; overflow-wrap: anywhere; background: #f3f6ff; margin: 0; padding: 16px; border-left: 3px solid #3555e8; }

@@ -1,5 +1,13 @@
 # 배포와 이후 수정
 
+## v0.4 입력 도우미 배포 구성
+
+`codex/neis-input-assistant`에서 검토된 문장 작업 파일, 입력 도우미 확장프로그램과 가상 연습 화면을 추가했다. 운영 반영 여부는 해당 커밋의 배포 상태와 실제 화면으로 확인한다.
+
+`pnpm dev`와 `pnpm build`는 먼저 `scripts/package-neis-helper.mjs`를 실행해 `public/downloads/damim-neis-helper.zip`을 만든다. 압축에는 `extension/neis-helper/`의 명시된 다섯 파일만 들어가며 환경변수·작업 파일·학생 자료는 들어가지 않는다. 생성 ZIP은 Git에서 제외하고 빌드마다 재생성한다. 앱과 확장 버전이 다르면 패키징을 중단한다. 의존성·DB·운영 환경변수 추가는 없다.
+
+웹앱 배포가 확장프로그램의 브라우저 설치를 대신하지 않는다. Chrome·Edge의 개발자 모드에서 압축 해제 폴더를 직접 로드한다. 스토어 등록은 하지 않았다. `/neis-practice`에서 가상 작업을 확인하며, 실제 나이스 호환성·저장 결과는 별도 검증한다. `activeTab`·`scripting`만 사용하고 인증서·비밀번호 접근이나 비공개 API 호출은 구현하지 않는다. 기존 `NEIS_API_KEY` 미설정은 공개정보 조회 기능에만 해당하며 입력 도우미와 별개이다.
+
 ## v0.3 운영 배포 (2026-09-29)
 
 [PR #1](https://github.com/gmlduqzhd-eng/Nice/pull/1)을 `main`에 병합한 커밋 `dc56c898aaaec7c037eae5297215e1f8e846c9f4`의 운영 배포가 성공했다. GitHub의 `Production – nice_helper_ys` 배포 상태와 [Vercel 배포](https://vercel.com/gmlduqzhd-engs-projects/nice_helper_ys/12uyjLVKAsVoi6uE1Kzd9GLfdXmy)의 성공 상태를 대조했다. 실제 [운영 주소](https://nicehelperys.vercel.app)에서 `v0.3` 표시, 학급·명부 메뉴, 가상 학생 추가 후 새로고침 유지, 390px 화면의 가로 넘침 없음과 브라우저 오류 없음까지 확인했다. `/`, `/privacy`, `/terms`는 HTTP 200이었다.
