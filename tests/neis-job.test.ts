@@ -78,6 +78,11 @@ test('identity comparison is exact, not substring or whole-page matching', () =>
   assert.equal(core.matches('room', '12반', '2'), false);
 });
 
+test('automatic mapping is restricted to the exact fictional practice route', () => {
+  for (const url of ['https://nicehelperys.vercel.app/neis-practice', 'http://localhost:3000/neis-practice', 'http://127.0.0.1:3001/neis-practice?test=1']) assert.equal(core.practice(url), true, url);
+  for (const url of ['https://goe.neis.go.kr/neis-practice', 'https://nicehelperys.vercel.app/neis-practice/other', 'https://nicehelperys.vercel.app.evil.test/neis-practice', 'https://user:pass@nicehelperys.vercel.app/neis-practice', 'https://example.com/neis-practice', 'bad url']) assert.equal(core.practice(url), false, url);
+});
+
 test('extension declares only temporary tab injection permissions', () => {
   const manifest = JSON.parse(readFileSync(new URL('../extension/neis-helper/manifest.json', import.meta.url), 'utf8'));
   assert.deepEqual(manifest.permissions, ['activeTab', 'scripting']);

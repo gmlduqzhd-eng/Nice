@@ -20,4 +20,8 @@ const centralBytes = Buffer.concat(central); const end = Buffer.alloc(22); end.w
 const destination = new URL('public/downloads/damim-neis-helper.zip', root);
 await mkdir(new URL('public/downloads/', root), { recursive: true });
 await writeFile(destination, Buffer.concat([...local, centralBytes, end]));
+await mkdir(new URL('public/neis-helper/', root), { recursive: true });
+for (const name of ['core.js', 'content.js']) {
+  await writeFile(new URL(`public/neis-helper/${name}`, root), await readFile(new URL(`extension/neis-helper/${name}`, root)));
+}
 console.log(`Packaged ${files.length} extension files: ${fileURLToPath(destination)}`);
