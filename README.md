@@ -17,7 +17,7 @@
 
 ## 실행
 
-Node.js 22 이상과 pnpm 11을 권장합니다. 실제 개발·검증은 Node.js 24에서 수행했습니다.
+Node.js 24와 프로젝트에 고정된 pnpm 11.19.0을 사용합니다. 실제 개발·검증도 Node.js 24에서 수행했습니다.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -52,10 +52,11 @@ Supabase 비밀 키나 service-role 키는 입력하지 않습니다. 구체적�
 ## Vercel 배포 준비
 
 1. 이 프로젝트 폴더를 Git 저장소로 관리하고 원하는 Vercel 프로젝트에 연결합니다.
-2. 프레임워크를 Next.js로 설정합니다. `vercel.json`은 서울 리전 `icn1`을 지정합니다.
-3. 필요한 환경변수만 개발·미리보기·운영 환경에 구분해 등록합니다.
-4. Supabase 로그인 Redirect URLs에 실제 배포 주소를 등록합니다.
-5. 가상 데이터로 연결을 검증한 미리보기부터 확인합니다.
+2. 프레임워크를 Next.js로 설정합니다. Node.js는 `package.json`의 `24.x`를 사용하며, `vercel.json`은 서울 리전 `icn1`을 지정합니다.
+3. Vercel 프로젝트의 미리보기·운영 환경변수에 `ENABLE_EXPERIMENTAL_COREPACK=1`을 등록합니다. Corepack이 `package.json`의 `packageManager`에 고정된 pnpm 11.19.0을 사용하도록 하는 필수 빌드 설정입니다. Install Command는 기본 자동 설정을 유지합니다. [Vercel Corepack 설정](https://vercel.com/docs/builds/configure-a-build#corepack)
+4. 필요한 앱 환경변수만 개발·미리보기·운영 환경에 구분해 등록합니다.
+5. Supabase 로그인 Redirect URLs에 실제 배포 주소를 등록합니다.
+6. 가상 데이터로 연결을 검증한 미리보기부터 확인합니다.
 
 배포는 아직 수행하지 않았으며, 유료 리소스도 생성하지 않았습니다. 개인정보 실사용은 학교의 운영·위탁·보유기간·접근권한 조건을 확인한 후 별도 단계로 진행합니다.
 
