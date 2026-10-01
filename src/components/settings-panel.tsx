@@ -8,6 +8,7 @@ import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { googleAuthEnabled } from "@/lib/google-auth";
 import { useAuth } from "./auth-provider";
 import { CloudBackupConflict, saveCloudBackup } from "@/lib/cloud-backup";
+import { JSON_BACKUP_SIZE_LABEL, MAX_JSON_BACKUP_BYTES, JsonBackupSizeError, serializeJsonBackup } from "@/lib/json-backup";
 
 type Props = {
   data: WorkspaceData;
@@ -144,7 +145,7 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
 
   function exportBackup() {
     try {
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+      const blob = new Blob([serializeJsonBackup(data)], { type: "application/json;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -154,8 +155,8 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       onToast("JSON 백업 다운로드를 시작했습니다.");
-    } catch {
-      onToast("백업 파일을 만들지 못했습니다. 다시 시도해 주세요.");
+    } catch (error) {
+      onToast(error instanceof JsonBackupSizeError ? error.message : "백업 파일을 만들지 못했습니다. 다시 시도해 주세요.");
     }
   }
 
@@ -163,8 +164,8 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file || operationPending.current || readOnly) return;
-    if (file.size > 1024 * 1024) {
-      onToast("1MB 이하의 JSON 백업 파일을 선택해 주세요.");
+    if (file.size > MAX_JSON_BACKUP_BYTES) {
+      onToast(`${JSON_BACKUP_SIZE_LABEL} 이하의 JSON 백업 파일을 선택해 주세요.`);
       return;
     }
     setImportBusy(true);
@@ -265,7 +266,7 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
           <button type="button" className="button secondary" onClick={() => fileInput.current?.click()} disabled={importBusy || cloudBusy || readOnly}><Upload size={16} aria-hidden="true" /> {importBusy ? "백업 읽는 중…" : "JSON 백업 불러오기"}</button>
           <input ref={fileInput} type="file" accept=".json,application/json" hidden aria-label="JSON 백업 파일 선택" onChange={importBackup} disabled={importBusy || cloudBusy || readOnly} />
         </div>
-        <p className="muted">지원 형식: 이 앱에서 내보낸 JSON · 최대 1MB · 불러오기 전 교체 여부를 확인합니다.</p>
+        <p className="muted">지원 형식: 이 앱에서 내보낸 JSON · 최대 {JSON_BACKUP_SIZE_LABEL} · 불러오기 전 교체 여부를 확인합니다.</p>
       </section>
 
       <section className="card stack" aria-labelledby="reset-title">

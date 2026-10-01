@@ -5,6 +5,7 @@ chrome.action.onClicked.addListener(async tab => {
     if (!DamimNeis.allowed(tab.url)) throw new Error('나이스 HTTPS 화면 또는 담임노트 연습 화면에서 열어 주세요.');
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['core.js', 'content.js'] });
     await chrome.action.setBadgeText({ tabId: tab.id, text: '' });
+    await chrome.action.setTitle({ tabId: tab.id, title: chrome.runtime.getManifest().action.default_title });
   } catch {
     // No page content, job data, tokens or URLs are logged.
     await chrome.action.setBadgeText({ tabId: tab.id, text: '!' });

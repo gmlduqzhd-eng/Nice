@@ -25,25 +25,31 @@
     if (typeof raw !== 'string' || new TextEncoder().encode(raw).length > 1000000) throw new Error('1MB 이하의 작업 JSON 파일을 선택하세요.');
     let job;
     try { job = JSON.parse(raw); } catch { throw new Error('작업 파일을 읽지 못했습니다. JSON 형식을 확인하세요.'); }
-    if (!record(job) || job.format !== 'damim-neis-job' || job.version !== 1 || job.task !== 'behavior-opinion') throw new Error('담임노트 행동특성 작업 파일이 아닙니다.');
+    if (!record(job) || job.format !== 'damim-neis-job') throw new Error('담임노트 행동특성 또는 학기말 작업 파일이 아닙니다.');
+    const semester = job.version === 2 && job.task === 'semester-subject-opinion';
+    if (!semester && (job.version !== 1 || job.task !== 'behavior-opinion')) throw new Error('담임노트 행동특성 또는 학기말 작업 파일이 아닙니다.');
+    const subject = semester && typeof job.subject === 'string' ? job.subject.trim().normalize('NFC') : '';
+    if (semester && (!text(subject, 40) || /[\u0000-\u001f\u007f]/.test(job.subject))) throw new Error('학기말 작업 파일의 교과를 확인하세요. 40자 이하의 한 줄 교과명이 필요합니다.');
     const time = typeof job.createdAt === 'string' ? Date.parse(job.createdAt) : NaN;
     if (!Number.isFinite(time) || time > now + 300000 || now - time > 86400000) throw new Error('작업 파일은 생성 후 24시간 동안 사용합니다. 최신 기록으로 다시 내려받으세요.');
     const c = job.classroom;
     if (!record(c) || !Number.isInteger(c.year) || c.year < 2000 || c.year > 2100 || !Number.isInteger(c.grade) || c.grade < 1 || c.grade > 6 || !text(c.room, 20) || /[\r\n\t]/.test(c.room) || ![1, 2].includes(c.semester)) throw new Error('학급 정보가 올바르지 않습니다.');
+    if (semester && /[\u0000-\u001f\u007f]/.test(c.room)) throw new Error('학급 정보가 올바르지 않습니다.');
     if (!Array.isArray(job.rows) || job.rows.length < 1 || job.rows.length > 500) throw new Error('1~500명의 작업 파일을 선택하세요.');
     const numbers = new Set();
     const rows = job.rows.map(row => {
       if (!record(row) || !Number.isInteger(row.number) || row.number < 1 || row.number > 999 || numbers.has(row.number) || !text(row.name, 100) || /[\r\n\t]/.test(row.name) || !text(row.content, 6000)) throw new Error('학생 번호·이름·문장 또는 중복을 확인하세요.');
+      if (semester && (/[\u0000-\u001f\u007f]/.test(row.name) || /\u007f/.test(row.content))) throw new Error('학생 번호·이름·문장 또는 중복을 확인하세요.');
       numbers.add(row.number);
-      return { number: row.number, name: row.name.trim(), content: row.content.replace(/\r\n?/g, '\n') };
+      return { number: row.number, name: semester ? row.name.trim().normalize('NFC') : row.name.trim(), content: row.content.replace(/\r\n?/g, '\n') };
     });
-    return { format: job.format, version: 1, task: job.task, createdAt: job.createdAt, classroom: { year: c.year, grade: c.grade, room: c.room.trim(), semester: c.semester }, rows };
+    return { format: job.format, version: semester ? 2 : 1, task: job.task, ...(semester ? { subject } : {}), createdAt: job.createdAt, classroom: { year: c.year, grade: c.grade, room: semester ? c.room.trim().normalize('NFC') : c.room.trim(), semester: c.semester }, rows };
   }
   function normalize(value) { return String(value).normalize('NFC').trim(); }
   function matches(kind, actual, expected) {
     const value = normalize(actual);
     const suffix = { year: '학년도', grade: '학년', room: '반', semester: '학기', number: '번' }[kind];
-    if (kind === 'name') return value === normalize(expected);
+    if (kind === 'name' || kind === 'subject') return value === normalize(expected);
     const raw = suffix && value.endsWith(suffix) ? value.slice(0, -suffix.length).trim() : value;
     if (kind === 'room') return raw === normalize(expected);
     return /^\d+$/.test(raw) && Number(raw) === expected;

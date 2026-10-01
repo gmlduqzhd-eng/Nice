@@ -93,9 +93,13 @@ test('service worker injects the packaged files only on supported pages', async 
   let onClick: (tab: { id: number; url: string }) => Promise<void> = async () => {};
   const calls: unknown[] = [];
   const badge: string[] = [];
+  const titles: string[] = [];
+  const defaultTitle = '담임노트 입력 도우미 열기';
   runInNewContext(readFileSync(new URL('../extension/neis-helper/background.js', import.meta.url), 'utf8'), { importScripts() {}, DamimNeis: core,
-    chrome: { action: { onClicked: { addListener(callback: typeof onClick) { onClick = callback; } }, setBadgeText({ text }: { text: string }) { badge.push(text); }, setTitle() {} }, scripting: { executeScript(value: unknown) { calls.push(JSON.parse(JSON.stringify(value))); } } } });
+    chrome: { runtime: { getManifest() { return { action: { default_title: defaultTitle } }; } }, action: { onClicked: { addListener(callback: typeof onClick) { onClick = callback; } }, setBadgeText({ text }: { text: string }) { badge.push(text); }, setTitle({ title }: { title: string }) { titles.push(title); } }, scripting: { executeScript(value: unknown) { calls.push(JSON.parse(JSON.stringify(value))); } } } });
   await onClick({ id: 1, url: 'https://example.com' }); assert.equal(calls.length, 0); assert.equal(badge[0], '!');
-  await onClick({ id: 2, url: 'https://nicehelperys.vercel.app/neis-practice' });
-  assert.deepEqual(calls, [{ target: { tabId: 2 }, files: ['core.js', 'content.js'] }]);
+  assert.match(titles[0], /지원하지 않습니다/);
+  await onClick({ id: 1, url: 'https://nicehelperys.vercel.app/neis-practice' });
+  assert.deepEqual(calls, [{ target: { tabId: 1 }, files: ['core.js', 'content.js'] }]);
+  assert.equal(badge.at(-1), ''); assert.equal(titles.at(-1), defaultTitle);
 });

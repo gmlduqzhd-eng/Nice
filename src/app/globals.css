@@ -67,4 +67,10 @@
 .helper-steps li + li { margin-top: 8px; }
 .practice-page { max-width: 940px; padding: 40px 24px; margin: 0 auto; }
 .practice-context { justify-content: flex-start; flex-wrap: wrap; gap: 24px; }
+.semester-practice-grid { min-width: 820px; }
+.semester-practice-row { display: grid; grid-template-columns: 70px 80px 100px 110px minmax(420px, 1fr); }
+.semester-practice-row > div { padding: 12px; border: 1px solid var(--line); }
+.semester-practice-row[aria-selected="true"] { background: #eef2ff; }
+.semester-practice-header { background: #f3f5f9; font-weight: 600; }
+.semester-practice-row textarea { width: 100%; }
 .practice-saved { white-space: pre-wrap; overflow-wrap: anywhere; background: #f3f6ff; margin: 0; padding: 16px; border-left: 3px solid #3555e8; }

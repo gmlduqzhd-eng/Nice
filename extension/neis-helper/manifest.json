@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "담임노트 나이스 입력 도우미 (검증용)",
-  "version": "0.4.2",
+  "version": "0.5.1",
   "description": "작업 파일과 선택한 화면의 학급·학생을 대조한 뒤 빈 문장 입력칸을 채우는 도우미입니다. 실제 나이스 호환성은 검증 전입니다.",
   "permissions": ["activeTab", "scripting"],
   "background": { "service_worker": "background.js" },

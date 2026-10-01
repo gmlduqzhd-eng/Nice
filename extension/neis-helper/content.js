@@ -13,14 +13,21 @@
   shadow.innerHTML = `<style>
     :host{all:initial;color:#192c46;font:14px/1.55 system-ui,sans-serif}*{box-sizing:border-box}
     section{background:#fff;border:2px solid #3555e8;border-radius:14px;box-shadow:0 12px 40px #0003;padding:16px;max-height:calc(100vh - 24px);overflow:auto}
-    h2{font-size:18px;margin:0}p{margin:8px 0}.muted{color:#536781;font-size:12px}button,input,select{font:inherit}button{cursor:pointer;background:#eef2ff;border:1px solid #b7c6ff;border-radius:7px;padding:8px;color:#203e86}button:disabled{cursor:not-allowed;opacity:.5}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #f5a623;outline-offset:2px}button.primary{background:#3555e8;color:white;width:100%;margin-top:8px}.row{display:flex;gap:8px;align-items:center;justify-content:space-between}.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0}input,select{max-width:100%;width:100%;margin:5px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:120px;overflow:auto;background:#f5f7fb;padding:8px;font:inherit}.status{padding:10px;background:#edf2ff;border-radius:8px;overflow-wrap:anywhere}.status.error{background:#fff0ed;color:#a12c15}.hidden{display:none}label{display:block}#close{padding:4px 8px}#cancel{width:100%}
-    #mapping-values{padding-left:18px;overflow-wrap:anywhere}summary{cursor:pointer}
+    h2{font-size:18px;margin:0}h3{font-size:15px;margin:12px 0 6px}p{margin:8px 0}.muted{color:#536781;font-size:12px}button,input,select{font:inherit}button{cursor:pointer;background:#eef2ff;border:1px solid #b7c6ff;border-radius:7px;padding:8px;color:#203e86}button:disabled{cursor:not-allowed;opacity:.5}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #f5a623;outline-offset:2px}button.primary{background:#3555e8;color:white;width:100%;margin-top:8px}.row{display:flex;gap:8px;align-items:center;justify-content:space-between}.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0}input,select{max-width:100%;width:100%;margin:5px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:120px;overflow:auto;background:#f5f7fb;padding:8px;font:inherit}.status{padding:10px;background:#edf2ff;border-radius:8px;overflow-wrap:anywhere}.status.error{background:#fff0ed;color:#a12c15}.hidden{display:none}label{display:block}#close{padding:4px 8px}#cancel{width:100%}
+    #mapping-values{padding-left:18px;overflow-wrap:anywhere}#diagnostic-reasons{padding-left:20px;margin:8px 0}summary{cursor:pointer}
   </style><section aria-label="담임노트 입력 도우미">
     <div class="row"><h2>담임노트 입력 도우미</h2><button id="close" aria-label="도우미 닫기">닫기</button></div>
-    <p class="muted">0.4.2 · ${webPractice ? '웹 연습' : '확장프로그램'} · 실제 나이스 호환성 미검증. 가상 자료만 사용하세요. 저장 버튼은 누르지 않으며 사이트의 입력 이벤트가 자동 저장을 실행할 수 있습니다.</p>
+    <p class="muted">0.5.1 · ${webPractice ? '웹 연습' : '확장프로그램'} · 실제 나이스 호환성 미검증. 가상 자료만 사용하세요. 저장 버튼은 누르지 않으며 사이트의 입력 이벤트가 자동 저장을 실행할 수 있습니다.</p>
+    <h3>화면 연결 점검</h3>
+    <p class="muted">작업 파일 없이 화면 구조만 확인합니다. 이 점검에서 도우미는 학생 정보와 문장을 읽거나 입력·저장을 실행하지 않습니다. iframe 내부는 확인하지 않습니다.</p>
+    <div class="grid"><button id="diagnostic-check">화면 연결 점검</button><button id="diagnostic-pick">입력칸 선택해 점검</button></div>
+    <p id="diagnostic-status" class="status" aria-live="polite">일반 입력칸 구조를 먼저 점검하세요. 실제 나이스 호환성은 별도 확인이 필요합니다.</p>
+    <ul id="diagnostic-reasons" class="muted" aria-label="연결 점검 사유" hidden></ul>
+    <button id="diagnostic-download" disabled>연결 점검 파일 받기</button>
+    <p class="muted">점검 파일에는 요소 개수와 지원 여부만 담습니다. 주소·학생 정보·문장·화면 원문은 포함하지 않습니다. 점검은 기존 입력 준비와 별개입니다.</p>
     <label>작업 JSON 파일<input id="file" type="file" accept=".json,application/json"></label>
     <p id="classroom"></p><label>작업 학생<select id="student" disabled></select></label><pre id="preview"></pre>
-    <p class="muted">각 ‘지정’ 버튼을 누른 뒤 화면에서 해당 값만 보이는 항목을 클릭하세요. 문장 입력칸도 따로 지정합니다. iframe·캔버스는 지원하지 않습니다.</p>
+    <p class="muted">각 ‘지정’ 버튼을 누른 뒤 화면에서 해당 값만 보이는 항목을 클릭하세요. 학기말 작업은 교과도 지정합니다. 문장 입력칸은 따로 지정하며 iframe·캔버스는 지원하지 않습니다.</p>
     ${practice ? '<button id="practice-map" class="primary">연습 화면 항목 자동 지정</button><p class="muted">이 가상 연습 화면에서만 사용합니다. 자동 지정 후에도 화면 대조를 거쳐야 입력할 수 있습니다.</p>' : ''}
     <div id="mapping" class="grid"></div><button id="cancel" class="hidden">지정 취소 (Esc)</button>
     <details><summary>지정한 값 확인</summary><ul id="mapping-values" aria-label="지정한 값" class="muted"></ul></details>
@@ -30,24 +37,172 @@
   </section>`;
   document.documentElement.append(host);
   const $ = id => shadow.getElementById(id);
-  const kinds = { year: '학년도', grade: '학년', room: '반', semester: '학기', number: '학생 번호', name: '학생 이름', field: '문장 입력칸' };
+  const kinds = { year: '학년도', grade: '학년', room: '반', semester: '학기', subject: '교과', number: '학생 번호', name: '학생 이름', field: '문장 입력칸' };
   let job = null, selected = 0, picking = null, prepared = null, revision = 0, closed = false, busy = false;
+  let diagnosticTarget = null;
   const targets = {};
   const initialUrl = location.href;
   function say(message, error = false) { $('status').textContent = message; $('status').className = `status${error ? ' error' : ''}`; }
   function invalidate() { prepared = null; $('fill').disabled = true; }
   function cancel() { picking = null; $('cancel').className = 'hidden'; }
+  const semesterJob = () => job?.task === 'semester-subject-opinion';
+  const activeKinds = () => Object.keys(kinds).filter(kind => kind !== 'subject' || semesterJob());
+  // Diagnostics never read input values, student cells, URLs, job data, raw
+  // errors or frames. Only fixed public headers/notices identify a grid contract.
+  function diagnosticVisible(element) {
+    if (!(element instanceof HTMLElement) || !element.isConnected || element.getRootNode() !== document || !element.getClientRects().length) return false;
+    const style = getComputedStyle(element);
+    return style.visibility === 'visible' && style.display !== 'none';
+  }
+  function diagnosticTextControl(element) {
+    return element instanceof HTMLTextAreaElement || (element instanceof HTMLInputElement && element.type === 'text');
+  }
+  function diagnosticEditable(element) {
+    return diagnosticTextControl(element) && diagnosticVisible(element) && !element.disabled && !element.readOnly && !element.matches(':disabled');
+  }
+  function semesterGrid(field) {
+    const row = field?.closest('[role="row"]');
+    const grid = row?.closest('[role="grid"]');
+    if (!row || !grid) return null;
+    const headers = [...grid.querySelectorAll('[role="columnheader"]')].filter(element => element.closest('[role="grid"]') === grid && diagnosticVisible(element));
+    const labels = headers.map(element => element.textContent.normalize('NFC').replace(/\s+/g, ''));
+    const expected = ['반/번호', '성명', '참고자료', '학기말종합의견'];
+    if (headers.length !== 5) return null;
+    const selectionHeader = labels[0] === '선택' || (labels[0] === '' && !!headers[0].querySelector('[role="checkbox"],input[type="checkbox"]'));
+    if (!selectionHeader || expected.some((label, index) => labels[index + 1] !== label || labels.filter(value => value === label).length !== 1)) return null;
+    const cells = [...row.querySelectorAll('[role="gridcell"]')].filter(element => element.closest('[role="row"]') === row && element.closest('[role="grid"]') === grid);
+    if (cells.length !== headers.length) return null;
+    const selectedRows = [...grid.querySelectorAll('[role="row"][aria-selected="true"]')].filter(element => element.closest('[role="grid"]') === grid && diagnosticVisible(element));
+    return {
+      row, grid,
+      numberCell: cells[labels.indexOf('반/번호')], nameCell: cells[labels.indexOf('성명')], opinionCell: cells[labels.indexOf('학기말종합의견')],
+      selected: selectedRows.length === 1 && selectedRows[0] === row,
+    };
+  }
+  function semesterClosedNotice() {
+    if (!document.body) return false;
+    // XPath returns only the smallest exact public-notice elements, including
+    // text split across inline children and nonbreaking spaces. No body text,
+    // student-cell text or other page strings are retrieved into JavaScript.
+    const normalized = "translate(normalize-space(translate(string(.), '\u00a0', ' ')), ' ', '')";
+    const exactNotice = `${normalized}='학생부반별마감됨' or ${normalized}='※학생부반별마감됨'`;
+    const notices = document.evaluate(`//*[not(self::html or self::body or self::script or self::style or self::textarea or self::input) and (${exactNotice}) and not(descendant::*[${exactNotice}])]`, document, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+    let element;
+    while ((element = notices.iterateNext())) {
+      if (diagnosticVisible(element)) return true;
+    }
+    return false;
+  }
+  function diagnosticReport() {
+    const count = selector => [...document.querySelectorAll(selector)].filter(diagnosticVisible).length;
+    const element = diagnosticTarget;
+    const kind = !element ? 'none' : element instanceof HTMLTextAreaElement ? 'textarea' : element instanceof HTMLInputElement && element.type === 'text' ? 'text-input' : 'other';
+    const connected = !!element && element.isConnected && element.getRootNode() === document;
+    const visible = diagnosticVisible(element);
+    const supported = kind === 'textarea' || kind === 'text-input';
+    const semester = connected && supported ? semesterGrid(element) : null;
+    const editor = semester?.row || (connected && supported ? element.closest('form,[role="dialog"],[data-damim-record]') : null);
+    const labelSources = {
+      ariaLabel: !!element?.hasAttribute('aria-label'),
+      htmlLabel: supported && !!element.labels?.length,
+      ariaLabelledby: !!element?.hasAttribute('aria-labelledby'),
+    };
+    const selection = {
+      kind, connected, visible, editable: diagnosticEditable(element), labelSources,
+      hasEditorRegion: !!editor,
+      editableTextControlCount: editor ? [...editor.querySelectorAll('textarea,input')].filter(diagnosticEditable).length : 0,
+    };
+    const reasonCodes = [];
+    if (!element) reasonCodes.push('FIELD_UNSELECTED');
+    else {
+      if (!connected) reasonCodes.push('FIELD_DISCONNECTED');
+      if (!visible) reasonCodes.push('FIELD_NOT_VISIBLE');
+      if (!supported) reasonCodes.push('UNSUPPORTED_FIELD');
+      if (supported) {
+        if (!selection.editable) reasonCodes.push('FIELD_NOT_EDITABLE');
+        if (!labelSources.ariaLabel && !labelSources.htmlLabel) reasonCodes.push('LABEL_CONNECTION_MISSING');
+        if (labelSources.ariaLabelledby) reasonCodes.push('ARIA_LABELLEDBY_UNVERIFIED');
+        if (!editor) reasonCodes.push('EDITOR_REGION_MISSING');
+        else if (selection.editableTextControlCount !== 1) reasonCodes.push('EDITOR_TEXT_CONTROL_COUNT');
+        if (semester) {
+          if (element.closest('[role="gridcell"]') !== semester.opinionCell) reasonCodes.push('SEMESTER_FIELD_CELL_UNVERIFIED');
+          if (!semester.selected) reasonCodes.push('SEMESTER_ROW_NOT_SELECTED');
+          if (semesterClosedNotice()) reasonCodes.push('SEMESTER_CLOSED_NOTICE');
+        }
+      }
+    }
+    return {
+      format: 'damim-neis-diagnostic', schemaVersion: 1, helperVersion: '0.5.1', pageKind: practice ? 'practice' : 'neis',
+      visibleCounts: {
+        textareas: count('textarea'),
+        textInputs: [...document.querySelectorAll('input')].filter(element => element.type === 'text' && diagnosticVisible(element)).length,
+        iframes: count('iframe'), canvases: count('canvas'),
+        contenteditables: [...document.querySelectorAll('[contenteditable]')].filter(element => element.isContentEditable && diagnosticVisible(element)).length,
+      },
+      selection, reasonCodes,
+      result: !element ? 'unselected' : reasonCodes.length ? 'needs-review' : 'candidate',
+    };
+  }
+  const diagnosticReasonMessages = Object.freeze({
+    FIELD_UNSELECTED: '점검할 입력칸을 아직 선택하지 않았습니다. ‘입력칸 선택해 점검’을 누르고 문장 입력칸을 클릭하세요.',
+    FIELD_DISCONNECTED: '선택한 입력칸이 화면에서 바뀌거나 제거됐습니다. 현재 입력칸을 다시 선택하세요.',
+    FIELD_NOT_VISIBLE: '선택한 입력칸이 현재 보이지 않습니다. 화면에 보이는 입력칸을 다시 선택하세요.',
+    UNSUPPORTED_FIELD: '선택한 항목이 일반 텍스트 입력칸이 아닙니다. 문장 입력칸 자체를 선택하세요. 전용 편집기는 추가 확인이 필요합니다.',
+    FIELD_NOT_EDITABLE: '선택한 입력칸은 현재 수정할 수 없습니다. 나이스에서 입력 가능 상태를 직접 확인하세요.',
+    LABEL_CONNECTION_MISSING: '입력칸의 이름 표시와 연결을 확인하지 못했습니다. 이 화면의 연결 방식은 추가 검증이 필요합니다.',
+    ARIA_LABELLEDBY_UNVERIFIED: '입력칸의 이름이 별도 화면 요소에 연결돼 있어 추가 확인이 필요합니다. 이 화면의 연결 방식은 추가 검증이 필요합니다.',
+    EDITOR_REGION_MISSING: '학생별 편집 영역 또는 학기말 표의 열 구성을 확인하지 못했습니다. 연결 점검 파일로 구조를 추가 확인해야 합니다.',
+    EDITOR_TEXT_CONTROL_COUNT: '학생별 편집 영역에서 수정 가능한 문장 입력칸을 하나로 확인하지 못했습니다. 입력 가능 상태와 입력칸 구성을 추가 확인해야 합니다.',
+    SEMESTER_FIELD_CELL_UNVERIFIED: '선택한 칸이 학기말 종합의견 열에 있는지 확인하지 못했습니다. 해당 학생 행의 학기말 의견 입력칸을 다시 선택하세요.',
+    SEMESTER_ROW_NOT_SELECTED: '입력할 학생 행 하나가 선택된 상태인지 확인하지 못했습니다. 나이스에서 원하는 학생 행을 선택한 뒤 다시 점검하세요.',
+    SEMESTER_CLOSED_NOTICE: '학생부 반별 마감 안내가 보입니다. 나이스에서 현재 상태를 확인하기 전까지 도우미 입력을 중단합니다.',
+  });
+  function displayDiagnostic(report) {
+    const counts = report.visibleCounts;
+    const summary = `보이는 일반 입력칸 ${counts.textareas + counts.textInputs}개 · iframe ${counts.iframes}개 · 캔버스 ${counts.canvases}개 · 직접 편집 영역 ${counts.contenteditables}개.`;
+    const result = report.result === 'candidate'
+      ? '일반 입력칸 후보입니다. 표시된 항목의 용도·학생 대조·자동 저장 여부와 실제 나이스 호환성은 추가 확인이 필요합니다.'
+      : report.result === 'unselected'
+        ? '입력칸을 선택해 구조를 더 확인할 수 있습니다. iframe 내부·캔버스·전용 편집기는 지원하지 않습니다.'
+        : '선택한 항목은 추가 확인이 필요합니다. 아래 점검 사유와 조치를 확인하세요. 입력·저장을 실행하지 않았습니다.';
+    $('diagnostic-status').textContent = `${summary} ${result}`;
+    const reasons = $('diagnostic-reasons'); reasons.replaceChildren();
+    for (const code of report.reasonCodes) {
+      const item = document.createElement('li');
+      item.textContent = Object.hasOwn(diagnosticReasonMessages, code) ? diagnosticReasonMessages[code] : '추가 확인이 필요한 화면 구조입니다. 연결 점검 파일로 구조를 추가 확인해야 합니다.';
+      reasons.append(item);
+    }
+    reasons.hidden = report.reasonCodes.length === 0;
+    $('diagnostic-download').disabled = false;
+  }
+  $('diagnostic-check').onclick = () => { if (busy || closed) return; invalidate(); cancel(); displayDiagnostic(diagnosticReport()); };
+  $('diagnostic-pick').onclick = () => {
+    if (busy || closed) return;
+    invalidate(); cancel(); picking = 'diagnostic'; $('cancel').className = '';
+    $('diagnostic-reasons').replaceChildren(); $('diagnostic-reasons').hidden = true;
+    $('diagnostic-status').textContent = '화면에서 점검할 입력칸을 클릭하세요. 도우미는 선택만 하며 입력·저장을 실행하지 않습니다. iframe 내부는 선택할 수 없고 Esc로 취소합니다.';
+  };
+  $('diagnostic-download').onclick = () => {
+    if (busy || closed) return;
+    invalidate(); cancel();
+    const report = diagnosticReport(); displayDiagnostic(report);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json;charset=utf-8' }));
+    const link = document.createElement('a'); link.href = url; link.download = '담임노트_화면연결점검.json';
+    shadow.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
   function readable(element) {
     if (!element?.isConnected || element.getRootNode() !== document || !element.getClientRects().length || getComputedStyle(element).visibility !== 'visible' || getComputedStyle(element).display === 'none') throw new Error('지정한 항목이 바뀌거나 보이지 않습니다. 다시 지정하세요.');
     if (element instanceof HTMLInputElement && ['password', 'hidden'].includes(element.type)) throw new Error('이 항목은 읽을 수 없습니다.');
     return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement ? element.value : element.textContent.trim();
   }
   const short = value => String(value).replace(/\s+/g, ' ').slice(0, 100);
-  function expected(kind) { return !job ? '작업 파일 선택 전' : kind === 'number' || kind === 'name' ? job.rows[selected][kind] : job.classroom[kind]; }
+  function expected(kind) { return !job ? '작업 파일 선택 전' : kind === 'subject' ? job.subject : kind === 'number' || kind === 'name' ? job.rows[selected][kind] : job.classroom[kind]; }
   function renderMappings() {
     $('mapping-values').replaceChildren();
     for (const [kind, label] of Object.entries(kinds)) {
       const button = shadow.querySelector(`[data-kind="${kind}"]`);
+      button.hidden = kind === 'subject' && !semesterJob();
+      if (button.hidden) continue;
       button.textContent = `${label} ${targets[kind] ? '다시 지정 ✓' : '지정'}`;
       let actual = '미지정';
       if (targets[kind]) {
@@ -59,31 +214,43 @@
       $('mapping-values').append(line);
     }
   }
-  function check() {
+  function check({ comparisonOnly = false } = {}) {
     if (!job || closed || location.href !== initialUrl || !core.allowed(location.href)) throw new Error('화면 또는 작업이 바뀌었습니다. 도우미를 닫고 다시 여세요.');
-    core.parseJob(JSON.stringify(job)); // Expiry is rechecked immediately before each write.
+    core.parseJob(JSON.stringify(job)); // Expiry is rechecked for comparison and immediately before each write.
     const row = job.rows[selected];
     const values = {};
     const field = targets.field;
     if (!(field instanceof HTMLTextAreaElement) && !(field instanceof HTMLInputElement && field.type === 'text')) throw new Error('일반 문장 입력칸을 지정하세요. 전용 편집기·iframe은 지원하지 않습니다.');
     const before = readable(field);
     if (field.disabled || field.readOnly || field.matches(':disabled')) throw new Error('수정할 수 없는 입력칸입니다.');
-    const editor = field.closest('form,[role="dialog"],[data-damim-record]');
-    if (!editor || !editor.contains(targets.number) || !editor.contains(targets.name)) throw new Error('학생 번호·이름과 문장 입력칸이 같은 편집 영역에 있어야 합니다. 목록의 다른 학생을 지정하지 마세요.');
-    const writable = [...editor.querySelectorAll('textarea,input[type="text"]')].filter(element => !element.disabled && !element.readOnly && element.getClientRects().length);
-    if (writable.length !== 1 || writable[0] !== field) throw new Error('이 편집 영역의 입력칸이 여러 개여서 구분할 수 없습니다. 학생별 편집 화면에서 다시 지정하세요.');
+    const closedNotice = semesterJob() && semesterClosedNotice();
+    if (semesterJob()) {
+      if (closedNotice && !comparisonOnly) throw new Error('마감 안내가 있어 추가 확인이 필요합니다. 학기말 입력을 중단했습니다. 나이스에서 현재 상태를 직접 확인하세요.');
+      const editor = semesterGrid(field);
+      if (!editor) throw new Error('학기말 종합의견 그리드의 열 구성을 확인하지 못했습니다. 화면 연결 점검 후 다시 지정하세요.');
+      if (!editor.selected) throw new Error('현재 입력할 학생 행이 하나만 선택되어 있어야 합니다. 나이스에서 학생을 직접 선택한 뒤 다시 대조하세요.');
+      if (!editor.numberCell.contains(targets.number) || !editor.nameCell.contains(targets.name) || field.closest('[role="gridcell"]') !== editor.opinionCell) throw new Error('학생 번호·이름과 학기말 입력칸을 같은 학생 행의 정확한 열에서 지정하세요.');
+      const writable = [...editor.row.querySelectorAll('textarea,input')].filter(diagnosticEditable);
+      if (writable.length !== 1 || writable[0] !== field) throw new Error('이 학생 행의 입력칸이 여러 개여서 구분할 수 없습니다. 현재 학기의 학기말 입력칸을 확인하세요.');
+    } else {
+      const editor = field.closest('form,[role="dialog"],[data-damim-record]');
+      if (!editor || !editor.contains(targets.number) || !editor.contains(targets.name)) throw new Error('학생 번호·이름과 문장 입력칸이 같은 편집 영역에 있어야 합니다. 목록의 다른 학생을 지정하지 마세요.');
+      const writable = [...editor.querySelectorAll('textarea,input[type="text"]')].filter(element => !element.disabled && !element.readOnly && element.getClientRects().length);
+      if (writable.length !== 1 || writable[0] !== field) throw new Error('이 편집 영역의 입력칸이 여러 개여서 구분할 수 없습니다. 학생별 편집 화면에서 다시 지정하세요.');
+    }
     const label = [field.getAttribute('aria-label') || '', ...[...(field.labels || [])].map(element => element.textContent)].join('');
-    if (!/행동특성\s*(?:및\s*)?종합의견/.test(label.replace(/\s+/g, ''))) throw new Error('행동특성 및 종합의견으로 표시된 입력칸만 지원합니다. 화면별 연결 검증이 필요합니다.');
+    const purpose = semesterJob() ? /학기말종합의견/ : /행동특성(?:및)?종합의견/;
+    if (!purpose.test(label.replace(/\s+/g, ''))) throw new Error(semesterJob() ? '학기말 종합의견으로 표시된 입력칸만 지원합니다. 화면별 연결 검증이 필요합니다.' : '행동특성 및 종합의견으로 표시된 입력칸만 지원합니다. 화면별 연결 검증이 필요합니다.');
     if (field instanceof HTMLInputElement && /[\r\n]/.test(row.content)) throw new Error('여러 줄 문장에는 여러 줄 입력칸을 지정하세요.');
     if (field.maxLength >= 0 && row.content.length > field.maxLength) throw new Error('문장이 이 입력칸의 최대 길이를 초과합니다.');
-    for (const kind of Object.keys(kinds).filter(key => key !== 'field')) {
+    for (const kind of activeKinds().filter(key => key !== 'field')) {
       const element = targets[kind];
       if (!element || element === field || element.contains(field) || field.contains(element)) throw new Error(`${kinds[kind]} 항목을 문장 입력칸과 별도로 지정하세요.`);
       values[kind] = readable(element);
       if (!core.matches(kind, values[kind], expected(kind))) throw new Error(`${kinds[kind]} 값이 작업 파일과 다릅니다. 선택한 값: 「${short(values[kind])}」 / 작업 파일: 「${short(expected(kind))}」. 해당 항목을 다시 지정하세요.`);
     }
     if (before !== '' && before !== row.content) throw new Error('기존 문장이 있어 입력을 중단했습니다. 덮어쓰지 않습니다.');
-    return { values, before, row, field, selected, revision };
+    return { values, before, row, field, selected, revision, closedNotice };
   }
   for (const [kind, label] of Object.entries(kinds)) {
     const button = document.createElement('button'); button.type = 'button'; button.textContent = `${label} 지정`; button.dataset.kind = kind;
@@ -94,6 +261,10 @@
     if (!picking || event.composedPath().includes(host)) return;
     event.preventDefault(); event.stopImmediatePropagation();
     const element = event.target;
+    if (picking === 'diagnostic') {
+      if (!(element instanceof HTMLElement)) { $('diagnostic-status').textContent = '입력칸 자체를 선택하세요. Esc로 취소할 수 있습니다.'; return; }
+      diagnosticTarget = element; cancel(); displayDiagnostic(diagnosticReport()); return;
+    }
     try {
       if (!(element instanceof HTMLElement) || ['IFRAME', 'CANVAS', 'BODY', 'HTML'].includes(element.tagName)) throw new Error('값이 표시된 개별 항목을 선택하세요. 이 화면 요소는 지원하지 않습니다.');
       readable(element);
@@ -103,7 +274,19 @@
       cancel(); invalidate(); say('항목을 지정했습니다. 모든 항목을 지정한 뒤 화면 대조를 누르세요.');
     } catch (error) { say(error.message, true); }
   }
-  function key(event) { if (event.key === 'Escape' && picking) { event.preventDefault(); cancel(); say('지정을 취소했습니다.'); } }
+  function diagnosticPointer(event) {
+    const path = event.composedPath();
+    const diagnosticAction = ['diagnostic-check', 'diagnostic-pick', 'diagnostic-download'].some(id => path.includes($(id)));
+    const diagnosticSelection = picking === 'diagnostic' && !path.includes(host);
+    if (!diagnosticAction && !diagnosticSelection) return;
+    // Avoid focusing or blurring page controls when using diagnostic actions or
+    // selecting a diagnostic target. Explicit keyboard focus changes are unaffected.
+    // Page handlers registered before this listener remain outside our control.
+    event.preventDefault(); event.stopImmediatePropagation();
+  }
+  function key(event) { if (event.key === 'Escape' && picking) { event.preventDefault(); const diagnostic = picking === 'diagnostic'; cancel(); if (diagnostic) $('diagnostic-status').textContent = '입력칸 점검 선택을 취소했습니다. 도우미는 입력·저장을 실행하지 않았습니다.'; else say('지정을 취소했습니다.'); } }
+  document.addEventListener('pointerdown', diagnosticPointer, { capture: true, passive: false });
+  document.addEventListener('mousedown', diagnosticPointer, { capture: true, passive: false });
   document.addEventListener('click', choose, true);
   document.addEventListener('keydown', key, true);
   document.addEventListener('visibilitychange', invalidate);
@@ -117,18 +300,18 @@
       const containers = document.querySelectorAll('main[data-damim-practice="1"]');
       if (containers.length !== 1) throw new Error('지원하는 연습 화면이 아닙니다. 최신 연습 페이지를 다시 여세요.');
       const next = {};
-      for (const kind of Object.keys(kinds)) {
+      for (const kind of activeKinds()) {
         const id = `practice-${kind === 'field' ? 'content' : kind}`;
         const elements = document.querySelectorAll(`[id="${id}"]`);
         if (elements.length !== 1 || !containers[0].contains(elements[0])) throw new Error('연습 항목을 정확히 찾지 못했습니다. 새로고침 후 다시 시도하세요.');
         readable(elements[0]); next[kind] = elements[0];
       }
       Object.assign(targets, next);
-      say('연습 화면의 일곱 항목을 지정했습니다. 작업 파일을 확인한 뒤 화면 대조를 누르세요.');
+      say('연습 화면의 항목을 지정했습니다. 작업 파일을 확인한 뒤 화면 대조를 누르세요.');
     } catch (error) { say(error.message, true); }
     renderMappings();
   };
-  $('cancel').onclick = () => { cancel(); say('지정을 취소했습니다.'); };
+  $('cancel').onclick = () => { const diagnostic = picking === 'diagnostic'; cancel(); if (diagnostic) $('diagnostic-status').textContent = '입력칸 점검 선택을 취소했습니다. 도우미는 입력·저장을 실행하지 않았습니다.'; else say('지정을 취소했습니다.'); };
   $('student').onchange = () => { selected = Number($('student').value); invalidate(); renderMappings(); $('preview').textContent = job.rows[selected].content; say('화면에서 같은 학생을 연 다음 다시 대조하세요.'); };
   $('file').onchange = async () => {
     const file = $('file').files[0]; $('file').value = '';
@@ -140,7 +323,7 @@
       const raw = await file.text(); if (closed || current !== revision) return;
       job = core.parseJob(raw); selected = 0;
       for (const [index, row] of job.rows.entries()) { const option = document.createElement('option'); option.value = String(index); option.textContent = `${row.number}번 ${row.name}`; $('student').append(option); }
-      const c = job.classroom; $('classroom').textContent = `${c.year}학년도 ${c.grade}학년 ${c.room}반 ${c.semester}학기 · ${job.rows.length}명`;
+      const c = job.classroom; $('classroom').textContent = `${c.year}학년도 ${c.grade}학년 ${c.room}반 ${c.semester}학기${semesterJob() ? ` · ${job.subject} · 학기말 종합의견` : ' · 행동특성 및 종합의견'} · ${job.rows.length}명`;
       $('student').disabled = false; $('inspect').disabled = false; $('preview').textContent = job.rows[0].content;
       renderMappings();
       say('작업 파일을 읽었습니다. 학급·학생 정보와 입력칸을 지정하세요.');
@@ -148,7 +331,14 @@
   };
   $('inspect').onclick = () => {
     cancel(); invalidate(); renderMappings();
-    try { prepared = check(); if (prepared.before === prepared.row.content) { say('화면에 같은 문장이 있습니다. 나이스 저장 여부는 직접 확인하세요.'); return; } $('fill').disabled = false; say('학급·학생 정보가 일치하고 입력칸이 비어 있습니다. 선택한 칸이 행동특성 및 종합의견 칸인지 확인 후 입력하세요.'); }
+    try {
+      const compared = check({ comparisonOnly: true });
+      if (compared.closedNotice) { say('학급·교과·학생 정보 대조를 마쳤습니다. 마감 안내가 있어 입력은 중단합니다. 기존 문장은 변경하지 않았습니다.'); return; }
+      prepared = compared;
+      if (prepared.before === prepared.row.content) { say('화면에 같은 문장이 있습니다. 나이스 저장 여부는 직접 확인하세요.'); return; }
+      $('fill').disabled = false;
+      say(`학급·학생 정보가 일치하고 입력칸이 비어 있습니다. 선택한 칸이 ${semesterJob() ? '학기말 종합의견' : '행동특성 및 종합의견'} 칸인지 확인 후 입력하세요.`);
+    }
     catch (error) { say(error.message, true); }
   };
   $('fill').onclick = async () => {
@@ -173,6 +363,6 @@
     } catch (error) { if (!closed) say(attempted ? `입력을 시도했지만 결과를 확인하지 못했습니다. 화면에 변경이 남아 있을 수 있으니 직접 확인하세요. ${error.message}` : error.message, true); }
     finally { busy = false; if (!closed) { $('student').disabled = !job; $('file').disabled = false; $('inspect').disabled = !job; } }
   };
-  const close = () => { closed = true; ++revision; job = null; prepared = null; cancel(); document.removeEventListener('click', choose, true); document.removeEventListener('keydown', key, true); document.removeEventListener('visibilitychange', invalidate); host.remove(); delete globalThis.__damimHelperClose; };
+  const close = () => { closed = true; ++revision; job = null; prepared = null; diagnosticTarget = null; cancel(); document.removeEventListener('pointerdown', diagnosticPointer, true); document.removeEventListener('mousedown', diagnosticPointer, true); document.removeEventListener('click', choose, true); document.removeEventListener('keydown', key, true); document.removeEventListener('visibilitychange', invalidate); host.remove(); delete globalThis.__damimHelperClose; };
   globalThis.__damimHelperClose = close; $('close').onclick = close;
 })();
