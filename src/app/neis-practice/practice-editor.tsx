@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 
 // Execute the same first-party scripts as the downloadable extension, on demand.
 // A web rehearsal does not verify browser installation or a real NEIS screen.
-function loadHelperScript(name: 'core' | 'content') {
+export function loadHelperScript(name: 'core' | 'content') {
   return new Promise<void>((resolve, reject) => {
     const script = document.createElement('script');
     script.src = `/neis-helper/${name}.js?v=0.5.0`;
