@@ -17,7 +17,7 @@
     #mapping-values{padding-left:18px;overflow-wrap:anywhere}#diagnostic-reasons{padding-left:20px;margin:8px 0}summary{cursor:pointer}
   </style><section aria-label="담임노트 입력 도우미">
     <div class="row"><h2>담임노트 입력 도우미</h2><button id="close" aria-label="도우미 닫기">닫기</button></div>
-    <p class="muted">0.5.0 · ${webPractice ? '웹 연습' : '확장프로그램'} · 실제 나이스 호환성 미검증. 가상 자료만 사용하세요. 저장 버튼은 누르지 않으며 사이트의 입력 이벤트가 자동 저장을 실행할 수 있습니다.</p>
+    <p class="muted">0.5.1 · ${webPractice ? '웹 연습' : '확장프로그램'} · 실제 나이스 호환성 미검증. 가상 자료만 사용하세요. 저장 버튼은 누르지 않으며 사이트의 입력 이벤트가 자동 저장을 실행할 수 있습니다.</p>
     <h3>화면 연결 점검</h3>
     <p class="muted">작업 파일 없이 화면 구조만 확인합니다. 이 점검에서 도우미는 학생 정보와 문장을 읽거나 입력·저장을 실행하지 않습니다. iframe 내부는 확인하지 않습니다.</p>
     <div class="grid"><button id="diagnostic-check">화면 연결 점검</button><button id="diagnostic-pick">입력칸 선택해 점검</button></div>
@@ -81,12 +81,15 @@
   }
   function semesterClosedNotice() {
     if (!document.body) return false;
-    // Select only exact public-notice text nodes. Do not retrieve arbitrary page
-    // text, student-cell text or the body text to search for a status string.
-    const notices = document.evaluate("//text()[normalize-space(.)='학생부 반별 마감됨' or normalize-space(.)='학생부반별마감됨' or normalize-space(.)='※ 학생부 반별 마감됨' or normalize-space(.)='※학생부반별마감됨']", document, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
-    let node;
-    while ((node = notices.iterateNext())) {
-      if (diagnosticVisible(node.parentElement)) return true;
+    // XPath returns only the smallest exact public-notice elements, including
+    // text split across inline children and nonbreaking spaces. No body text,
+    // student-cell text or other page strings are retrieved into JavaScript.
+    const normalized = "translate(normalize-space(translate(string(.), '\u00a0', ' ')), ' ', '')";
+    const exactNotice = `${normalized}='학생부반별마감됨' or ${normalized}='※학생부반별마감됨'`;
+    const notices = document.evaluate(`//*[not(self::html or self::body or self::script or self::style or self::textarea or self::input) and (${exactNotice}) and not(descendant::*[${exactNotice}])]`, document, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+    let element;
+    while ((element = notices.iterateNext())) {
+      if (diagnosticVisible(element)) return true;
     }
     return false;
   }
@@ -129,7 +132,7 @@
       }
     }
     return {
-      format: 'damim-neis-diagnostic', schemaVersion: 1, helperVersion: '0.5.0', pageKind: practice ? 'practice' : 'neis',
+      format: 'damim-neis-diagnostic', schemaVersion: 1, helperVersion: '0.5.1', pageKind: practice ? 'practice' : 'neis',
       visibleCounts: {
         textareas: count('textarea'),
         textInputs: [...document.querySelectorAll('input')].filter(element => element.type === 'text' && diagnosticVisible(element)).length,

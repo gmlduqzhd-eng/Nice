@@ -134,13 +134,13 @@ test('job screen fits a 390px viewport and supplies the packaged download', asyn
 
 test('deployed web launcher uses packaged scripts and fills through automatic practice mapping', async ({ page, request }, testInfo) => {
   for (const name of ['core.js', 'content.js']) {
-    const response = await request.get(`/neis-helper/${name}?v=0.5.0`);
+    const response = await request.get(`/neis-helper/${name}?v=0.5.1`);
     expect(response.ok()).toBe(true);
     expect((await response.text()).replace(/\r\n/g, '\n')).toBe((await readFile(path.join(extension, name), 'utf8')).replace(/\r\n/g, '\n'));
   }
   await page.goto('/neis-practice');
   await page.getByRole('button', { name: '웹 연습 도우미 열기', exact: true }).click();
-  await expect(panel(page).getByText(/0.5.0 · 웹 연습/)).toBeVisible();
+  await expect(panel(page).getByText(/0.5.1 · 웹 연습/)).toBeVisible();
   await panel(page).getByLabel('작업 JSON 파일').setInputFiles({ name: 'job.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(job())) });
   await panel(page).getByRole('button', { name: '연습 화면 항목 자동 지정' }).click();
   await expect(panel(page).getByRole('button', { name: '대조한 빈칸에 입력' })).toBeDisabled();

@@ -57,22 +57,29 @@ export async function generateAiDraft(input: AiDraftInput, signal: AbortSignal) 
 const reserve = createAiLimiter();
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 
-async function readBody(request: Request): Promise<unknown> {
+async function readBody(request: Request, signal: AbortSignal): Promise<unknown> {
+  signal.throwIfAborted();
   const limit = 64 * 1024;
   if (Number(request.headers.get('content-length')) > limit) throw new AiRequestError('AI_INPUT_TOO_LARGE', 413);
   const reader = request.body?.getReader();
   if (!reader) throw new AiRequestError('AI_INVALID_INPUT', 400);
   const chunks: Uint8Array[] = [];
   let size = 0;
+  // Cancelling closes pending reads immediately. Do not await the underlying
+  // stream's cancellation, which can itself stall after a client disconnect.
+  const cancel = () => { void reader.cancel(signal.reason).catch(() => {}); };
+  signal.addEventListener('abort', cancel, { once: true });
   try {
     while (true) {
+      signal.throwIfAborted();
       const { done, value } = await reader.read();
+      signal.throwIfAborted();
       if (done) break;
       size += value.byteLength;
-      if (size > limit) { await reader.cancel(); throw new AiRequestError('AI_INPUT_TOO_LARGE', 413); }
+      if (size > limit) { void reader.cancel().catch(() => {}); throw new AiRequestError('AI_INPUT_TOO_LARGE', 413); }
       chunks.push(value);
     }
-  } finally { reader.releaseLock(); }
+  } finally { signal.removeEventListener('abort', cancel); reader.releaseLock(); }
   const bytes = new Uint8Array(size);
   let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
@@ -90,7 +97,7 @@ export function createAiDraftHandler(dependencies: Dependencies = { authenticate
       if (!request.headers.get('content-type')?.startsWith('application/json')) throw new AiRequestError('AI_INVALID_INPUT', 400);
       const authorization = request.headers.get('authorization') ?? '';
       if (!/^Bearer \S{10,8192}$/.test(authorization)) throw new AiRequestError('AI_LOGIN_REQUIRED', 401);
-      const input = parseAiDraftInput(await readBody(request));
+      const input = parseAiDraftInput(await readBody(request, signal));
       if (!input) throw new AiRequestError('AI_INVALID_INPUT', 400);
       const userId = await dependencies.authenticate(authorization.slice(7), signal);
       signal.throwIfAborted();

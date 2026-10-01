@@ -214,10 +214,110 @@ for (const semester of [1, 2] as const) {
   });
 }
 
+for (const noticeShape of ['split-inline', 'nonbreaking-spaces'] as const) {
+  test(`isolated semester extension blocks ${noticeShape} closure during comparison and before input`, async ({ page, extension }) => {
+    await semesterPractice(page); await extension.click();
+    const panel = page.locator('#damim-neis-helper');
+    const field = page.getByLabel('학기말 종합의견', { exact: true });
+    await panel.getByLabel('작업 JSON 파일').setInputFiles({ name: 'semester.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(semesterJob())) });
+    await panel.getByRole('button', { name: '연습 화면 항목 자동 지정' }).click();
+    await page.locator('a[href="/"]').focus();
+    await page.evaluate(() => {
+      const hiddenNotice = document.createElement('strong');
+      hiddenNotice.style.display = 'none'; hiddenNotice.textContent = '※ 학생부 반별 마감됨';
+      const unrelated = document.createElement('p'); unrelated.textContent = '학생부 반별 마감됨 안내 없음';
+      document.body.append(hiddenNotice, unrelated);
+      const counts = { input: 0, change: 0, submit: 0 };
+      (window as Window & { noticeGuardEffects?: typeof counts }).noticeGuardEffects = counts;
+      for (const type of ['input', 'change', 'submit'] as const) document.addEventListener(type, () => { counts[type]++; }, true);
+    });
+    // Instrument the native setter in the extension's isolated world, where the
+    // helper writes. A page-world or field-only setter would miss that write.
+    await extension.worker.evaluate(async url => {
+      const [tab] = await chrome.tabs.query({ url });
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          const field = document.getElementById('practice-content') as HTMLTextAreaElement;
+          const prototype = HTMLTextAreaElement.prototype;
+          const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value')!;
+          let writes = 0;
+          Object.defineProperty(prototype, 'value', {
+            ...descriptor,
+            set(this: HTMLTextAreaElement, value: string) { if (this === field) writes++; descriptor.set!.call(this, value); },
+          });
+          (globalThis as typeof globalThis & { noticeGuardWrites?: () => number }).noticeGuardWrites = () => writes;
+        },
+      });
+    }, page.url());
+    let nonGetRequests = 0;
+    page.on('request', request => { if (request.method() !== 'GET') nonGetRequests++; });
+    const inspect = () => panel.getByRole('button', { name: '화면 대조', exact: true }).click();
+    async function addVisibleNotice() {
+      await page.evaluate(shape => {
+        const notice = document.createElement('strong'); notice.id = 'fixture-closed-notice';
+        if (shape === 'split-inline') {
+          const ending = document.createElement('b'); ending.textContent = '반별 마감됨';
+          notice.append('※ 학생부 ', ending);
+        } else notice.textContent = '※\u00a0학생부\u00a0반별\u00a0마감됨';
+        document.body.append(notice);
+      }, noticeShape);
+    }
+    async function expectNoWriteEffects() {
+      const writes = await extension.worker.evaluate(async url => {
+        const [tab] = await chrome.tabs.query({ url });
+        const [{ result }] = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: () => (globalThis as typeof globalThis & { noticeGuardWrites: () => number }).noticeGuardWrites(),
+        });
+        return result;
+      }, page.url());
+      expect(writes).toBe(0);
+      expect(await page.evaluate(() => (window as Window & {
+        noticeGuardEffects?: { input: number; change: number; submit: number };
+      }).noticeGuardEffects)).toEqual({ input: 0, change: 0, submit: 0 });
+      expect(nonGetRequests).toBe(0);
+      await expect(field).toHaveValue('');
+      await expect(page.getByText('아직 가상 학기말 저장하지 않았습니다.', { exact: true })).toBeVisible();
+      await expect(page.locator('.practice-saved')).toHaveCount(0);
+    }
+    // Hidden exact notices and longer, unrelated text do not create closure.
+    await inspect(); await expect(panel.locator('#fill')).toBeEnabled();
+    await expectNoWriteEffects();
+    await addVisibleNotice(); await inspect();
+    await expect(panel.getByRole('status')).toContainText('마감 안내가 있어 입력은 중단');
+    await expect(panel.locator('#fill')).toBeDisabled(); await expectNoWriteEffects();
+    await panel.locator('#diagnostic-pick').click(); await field.click();
+    const diagnostic = await downloadDiagnostic(page, panel);
+    expect(diagnostic.report.reasonCodes).toContain('SEMESTER_CLOSED_NOTICE');
+    for (const privateValue of ['fixture-closed-notice', '백아람', '체육']) expect(diagnostic.raw.includes(privateValue)).toBe(false);
+    await expectNoWriteEffects();
+    await page.locator('#fixture-closed-notice').evaluate(element => element.remove());
+    await inspect(); await expect(panel.locator('#fill')).toBeEnabled();
+    await addVisibleNotice(); await panel.locator('#fill').click();
+    await expect(panel.getByRole('status')).toContainText('마감 안내가 있어 추가 확인이 필요합니다');
+    await expect(panel.locator('#fill')).toBeDisabled(); await expectNoWriteEffects();
+    // Verify instrumentation after the protected interval without dispatching
+    // any input event or returning the fictional opinion from the isolated world.
+    const positiveControl = await extension.worker.evaluate(async url => {
+      const [tab] = await chrome.tabs.query({ url });
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(document.getElementById('practice-content'), '');
+          return (globalThis as typeof globalThis & { noticeGuardWrites: () => number }).noticeGuardWrites();
+        },
+      });
+      return result;
+    }, page.url());
+    expect(positiveControl).toBe(1);
+  });
+}
+
 type DiagnosticReport = {
   format: 'damim-neis-diagnostic';
   schemaVersion: 1;
-  helperVersion: '0.5.0';
+  helperVersion: '0.5.1';
   pageKind: 'neis' | 'practice';
   visibleCounts: { textareas: number; textInputs: number; iframes: number; canvases: number; contenteditables: number };
   selection: {
@@ -247,7 +347,7 @@ async function downloadDiagnostic(page: Page, panel: Locator) {
     'connected', 'editable', 'editableTextControlCount', 'hasEditorRegion', 'kind', 'labelSources', 'visible',
   ]);
   expect(Object.keys(report.selection.labelSources).sort()).toEqual(['ariaLabel', 'ariaLabelledby', 'htmlLabel']);
-  expect(report).toMatchObject({ format: 'damim-neis-diagnostic', schemaVersion: 1, helperVersion: '0.5.0', pageKind: 'practice' });
+  expect(report).toMatchObject({ format: 'damim-neis-diagnostic', schemaVersion: 1, helperVersion: '0.5.1', pageKind: 'practice' });
   const reasonCodes = [
     'FIELD_UNSELECTED', 'FIELD_DISCONNECTED', 'FIELD_NOT_VISIBLE', 'UNSUPPORTED_FIELD', 'FIELD_NOT_EDITABLE',
     'LABEL_CONNECTION_MISSING', 'ARIA_LABELLEDBY_UNVERIFIED', 'EDITOR_REGION_MISSING', 'EDITOR_TEXT_CONTROL_COUNT',
@@ -427,7 +527,7 @@ test('loaded extension diagnoses without a job and exports only structural metad
   expect(await page.evaluate(() => document.activeElement?.id)).toBe(focusedBeforeSelection);
   const selected = await downloadDiagnostic(page, panel);
   expect(selected.report).toEqual({
-    format: 'damim-neis-diagnostic', schemaVersion: 1, helperVersion: '0.5.0', pageKind: 'practice',
+    format: 'damim-neis-diagnostic', schemaVersion: 1, helperVersion: '0.5.1', pageKind: 'practice',
     visibleCounts: { textareas: 1, textInputs: 0, iframes: 0, canvases: 0, contenteditables: 0 },
     selection: {
       kind: 'textarea', connected: true, visible: true, editable: true,

@@ -35,6 +35,43 @@ test('a cancelled request never starts model generation after authentication', a
   assert.equal(response.status, 504);
   assert.equal(state.generated.length, 0);
 });
+test('deadline and request cancellation stop a stalled body without waiting for stream cleanup', { timeout: 1000 }, async context => {
+  let deadline = new AbortController();
+  context.mock.method(AbortSignal, 'timeout', (milliseconds: number) => {
+    assert.equal(milliseconds, 30_000);
+    return deadline.signal;
+  });
+  for (const source of ['deadline', 'request'] as const) {
+    deadline = new AbortController();
+    const controller = new AbortController();
+    let started!: () => void;
+    const reading = new Promise<void>(resolve => { started = resolve; });
+    let cancelled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull() { started(); },
+      cancel() { cancelled += 1; return new Promise<void>(() => {}); },
+    }, { highWaterMark: 0 });
+    const init: RequestInit & { duplex: 'half' } = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer synthetic-test-token' },
+      body,
+      signal: controller.signal,
+      duplex: 'half',
+    };
+    const state = setup();
+    const responsePromise = state.handler(new Request('https://example.invalid/api/ai/draft', init));
+    await reading;
+    assert.equal(body.locked, true);
+    (source === 'deadline' ? deadline : controller).abort();
+    const response = await responsePromise;
+    assert.equal(response.status, 504);
+    assert.equal((await response.json()).code, 'AI_TIMEOUT');
+    assert.equal(cancelled, 1);
+    assert.equal(body.locked, false);
+    assert.equal(state.authenticated.length, 0);
+    assert.equal(state.generated.length, 0);
+  }
+});
 test('rejects incomplete, markup, placeholder and overlong model outputs', () => {
   assert.equal(normalizeAiDraft(sentence), sentence);
   for (const bad of ['', '설명입니다', '# 제목\n협력함.', '<script>함.</script>', '[학생]은 협력함.', '가'.repeat(501) + '함.']) assert.equal(normalizeAiDraft(bad), null);
@@ -74,6 +111,30 @@ test('model setup and upstream failures are sanitized and release reservation', 
     assert.equal(body.code, expectedCode);
     assert.doesNotMatch(JSON.stringify(body), /private-key/);
     assert.equal(state.releases(), 1);
+  }
+});
+test('an actually missing API key returns setup guidance without calling Google', async () => {
+  const previousFetch = globalThis.fetch;
+  const previousKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; throw new Error('provider must not be called'); };
+  try {
+    for (const value of [undefined, '   ']) {
+      if (value === undefined) delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+      else process.env.GOOGLE_GENERATIVE_AI_API_KEY = value;
+      const state = setup({ generate: generateAiDraft });
+      const response = await state.handler(request());
+      assert.equal(response.status, 503);
+      const payload = await response.json();
+      assert.equal(payload.code, 'AI_NOT_READY');
+      assert.equal(payload.text, undefined);
+      assert.equal(state.releases(), 1);
+    }
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    else process.env.GOOGLE_GENERATIVE_AI_API_KEY = previousKey;
   }
 });
 test('invalid model result never becomes a successful draft', async () => {

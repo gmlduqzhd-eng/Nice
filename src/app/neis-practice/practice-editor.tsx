@@ -7,7 +7,7 @@ import { useRef, useState } from 'react';
 export function loadHelperScript(name: 'core' | 'content') {
   return new Promise<void>((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = `/neis-helper/${name}.js?v=0.5.0`;
+    script.src = `/neis-helper/${name}.js?v=0.5.1`;
     script.dataset.damimMode = 'web-practice';
     const finish = (error?: Error) => {
       clearTimeout(timer); script.remove();

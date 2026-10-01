@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
+import { createDemoWorkspace } from "../src/lib/demo";
+import { MAX_JSON_BACKUP_BYTES } from "../src/lib/json-backup";
 
 async function navigate(page: Page, name: string) {
   await page.getByRole("button", { name, exact: true }).click();
@@ -213,6 +215,39 @@ test("JSON 백업 다운로드와 확인을 거친 복원이 실제 기록을 �
   await expect(page.locator(".editor-title").getByText("반영 확인", { exact: true })).toBeVisible();
 });
 
+test("1MB보다 큰 유효한 가상 기록도 JSON 내보내기와 다시 불러오기를 완료한다", async ({ page }) => {
+  const workspace = createDemoWorkspace();
+  workspace.observations.push(...Array.from({ length: 40 }, (_, index) => ({
+    id: `large-fictional-${index}`,
+    studentId: workspace.students[0].id,
+    date: "2026-10-01",
+    category: "생활",
+    content: `대용량 백업 검증용 가상 기록 ${index} ${"가".repeat(9960)}`,
+  })));
+  const file = Buffer.from(JSON.stringify(workspace, null, 2), "utf8");
+  expect(file.byteLength).toBeGreaterThan(1024 * 1024);
+  expect(file.byteLength).toBeLessThan(MAX_JSON_BACKUP_BYTES);
+  await navigate(page, "설정 및 백업");
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByLabel("JSON 백업 파일 선택", { exact: true }).setInputFiles({ name: "large-fictional.json", mimeType: "application/json", buffer: file });
+  await expect(page.getByRole("region", { name: "불러온 백업" })).toContainText("관찰 52건");
+
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("button", { name: "JSON 백업 내려받기", exact: true }).click();
+  const exported = await readFile((await (await downloaded).path())!);
+  expect(exported.byteLength).toBeGreaterThan(1024 * 1024);
+  expect(JSON.parse(exported.toString("utf8"))).toEqual(workspace);
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "예시 데이터 초기화", exact: true }).click();
+  await expect(page.getByRole("region", { name: "불러온 백업" })).toHaveCount(0);
+
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByLabel("JSON 백업 파일 선택", { exact: true }).setInputFiles({ name: "exported-large-fictional.json", mimeType: "application/json", buffer: exported });
+  await expect(page.getByRole("region", { name: "불러온 백업" })).toContainText("관찰 52건");
+  await navigate(page, "관찰 노트");
+  await expect(page.getByText("총 52개의 기록", { exact: true })).toBeVisible();
+});
+
 test('JSON 파일을 읽는 동안 추가한 기록은 복원으로 덮어쓰지 않는다', async ({ page }) => {
   await navigate(page, '설정 및 백업');
   const downloaded = page.waitForEvent('download');
@@ -239,15 +274,15 @@ test('JSON 파일을 읽는 동안 추가한 기록은 복원으로 덮어쓰지
   await expect(page.getByText('파일 읽기 중 새로 추가한 가상 기록', { exact: true })).toBeVisible();
 });
 
-test("손상된 JSON과 1MB 초과 파일은 기록을 교체하지 않는다", async ({ page }) => {
+test("손상된 JSON과 20MB 초과 파일은 기록을 교체하지 않는다", async ({ page }) => {
   await navigate(page, "설정 및 백업");
   const input = page.getByLabel("JSON 백업 파일 선택", { exact: true });
   await input.setInputFiles({ name: "broken.json", mimeType: "application/json", buffer: Buffer.from("{broken json") });
   await expect(page.getByRole("status")).toContainText("백업 파일을 읽지 못했거나 적용하지 못했습니다.");
   await input.setInputFiles({ name: "wrong-format.json", mimeType: "application/json", buffer: Buffer.from('{"version":99}') });
   await expect(page.getByRole("status")).toContainText("지원하지 않는 백업 형식입니다.");
-  await input.setInputFiles({ name: "too-large.json", mimeType: "application/json", buffer: Buffer.alloc(1024 * 1024 + 1, " ") });
-  await expect(page.getByRole("status")).toContainText("1MB 이하의 JSON 백업 파일");
+  await input.setInputFiles({ name: "too-large.json", mimeType: "application/json", buffer: Buffer.alloc(MAX_JSON_BACKUP_BYTES + 1, " ") });
+  await expect(page.getByRole("status")).toContainText("20MB 이하의 JSON 백업 파일");
   await navigate(page, "관찰 노트");
   await expect(page.getByText("총 12개의 기록", { exact: true })).toBeVisible();
 });
