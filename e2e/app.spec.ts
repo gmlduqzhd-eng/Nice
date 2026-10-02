@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 import { createDemoWorkspace } from "../src/lib/demo";
 import { MAX_JSON_BACKUP_BYTES } from "../src/lib/json-backup";
+import { workspaceStorageKey } from "../src/lib/workspace-storage";
 
 async function navigate(page: Page, name: string) {
   await page.getByRole("button", { name, exact: true }).click();
@@ -15,7 +16,7 @@ async function selectStudent(page: Page, name: string) {
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText("이 브라우저에 저장", { exact: true })).toBeVisible();
+  await expect(page.getByText("이 PC에 자동 저장", { exact: true })).toBeVisible();
 });
 
 test("업무 화면과 주요 메뉴가 오류 없이 열린다", async ({ page }) => {
@@ -26,7 +27,7 @@ test("업무 화면과 주요 메뉴가 오류 없이 열린다", async ({ page 
   await expect(page.getByRole("heading", { name: "선생님, 오늘도 반갑습니다", level: 1 })).toBeVisible();
   await expect(page.getByText("가상 학생으로 이용하는 첫 버전입니다.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: /쌓인 관찰 기록/ })).toContainText("12");
-  for (const menu of ["관찰 노트", "나이스 입력 준비", "학교 · 학사일정", "설정 및 백업"]) {
+  for (const menu of ["관찰 노트", "문장 작성·검토", "학교 · 학사일정", "설정 및 백업"]) {
     await navigate(page, menu);
   }
   const cloudWaiting = page.getByRole("button", { name: "클라우드 연결 대기", exact: true });
@@ -108,7 +109,7 @@ test("첫 사용 안내에서 학생별 기록을 이어 쓰면 날짜·분류�
 test("사용 안내를 접은 상태가 유지되고 저작권 안내를 열어 확인할 수 있다", async ({ page }) => {
   const heading = page.getByRole("heading", { name: "하루 한 줄부터 시작해 보세요.", exact: true });
   await page.getByRole("button", { name: /입력 문장 준비하기/ }).click();
-  await expect(page.getByRole("heading", { name: "나이스 입력 준비", exact: true, level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "문장 작성·검토", exact: true, level: 1 })).toBeVisible();
   await page.getByRole("navigation", { name: "주 메뉴" }).getByRole("button", { name: /^업무 한눈에/ }).click();
   await expect(page.getByRole("heading", { name: "선생님, 오늘도 반갑습니다", level: 1 })).toBeVisible();
   await page.getByRole("button", { name: /내 기록 보관하기/ }).click();
@@ -128,7 +129,7 @@ test("사용 안내를 접은 상태가 유지되고 저작권 안내를 열어 
 });
 
 test("반영 확인한 문장을 수정하면 검토 상태가 초기화된다", async ({ page }) => {
-  await navigate(page, "나이스 입력 준비");
+  await navigate(page, "문장 작성·검토");
   await selectStudent(page, "강가람");
   await expect(page.locator(".editor-title").getByText("반영 확인", { exact: true })).toBeVisible();
   const editor = page.getByLabel("나이스에 입력할 문장", { exact: true });
@@ -138,7 +139,7 @@ test("반영 확인한 문장을 수정하면 검토 상태가 초기화된다",
   await expect(page.getByRole("button", { name: "문장 복사", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "나이스 반영 확인", exact: true })).toBeDisabled();
   await page.reload();
-  await navigate(page, "나이스 입력 준비");
+  await navigate(page, "문장 작성·검토");
   await selectStudent(page, "강가람");
   await expect(editor).toHaveValue(changed);
   await expect(page.locator(".editor-title").getByText("작성 중", { exact: true })).toBeVisible();
@@ -146,7 +147,7 @@ test("반영 확인한 문장을 수정하면 검토 상태가 초기화된다",
 
 test("관찰 원문 모으기부터 검토·실제 복사·교사 반영 확인까지 진행한다", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await navigate(page, "나이스 입력 준비");
+  await navigate(page, "문장 작성·검토");
   await selectStudent(page, "윤보라");
   const editor = page.getByLabel("나이스에 입력할 문장", { exact: true });
   await expect(editor).toHaveValue("");
@@ -177,8 +178,8 @@ test("모바일 390px에서 가로 넘침 없이 메뉴와 입력 화면을 이�
   await expect(page.getByRole("button", { name: "메뉴 열기", exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole("button", { name: "메뉴 열기", exact: true }).click();
-  await page.getByRole("navigation", { name: "주 메뉴" }).getByRole("button", { name: "나이스 입력 준비", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "나이스 입력 준비", level: 1 })).toBeVisible();
+  await page.getByRole("navigation", { name: "주 메뉴" }).getByRole("button", { name: "문장 작성·검토", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "문장 작성·검토", level: 1 })).toBeVisible();
   await expect(page.getByRole("button", { name: "메뉴 닫기", exact: true })).not.toBeVisible();
   await expect(page.getByLabel("나이스에 입력할 문장", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -187,17 +188,17 @@ test("모바일 390px에서 가로 넘침 없이 메뉴와 입력 화면을 이�
 test("JSON 백업 다운로드와 확인을 거친 복원이 실제 기록을 되돌린다", async ({ page }) => {
   await navigate(page, "설정 및 백업");
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "JSON 백업 내려받기", exact: true }).click();
+  await page.getByRole("button", { name: "전체 기록 백업 파일 내려받기", exact: true }).click();
   const download = await downloadPromise;
   const filePath = await download.path();
   expect(filePath).not.toBeNull();
   const exported = await readFile(filePath!);
   const backup = JSON.parse(exported.toString("utf8"));
-  expect(backup.version).toBe(2);
+  expect(backup.version).toBe(3);
   expect(backup.students).toHaveLength(8);
   expect(backup.observations).toHaveLength(12);
 
-  await navigate(page, "나이스 입력 준비");
+  await navigate(page, "문장 작성·검토");
   await selectStudent(page, "강가람");
   await page.getByLabel("나이스에 입력할 문장", { exact: true }).fill("백업 복원을 확인하기 위한 연습 문장입니다.");
   await navigate(page, "설정 및 백업");
@@ -209,7 +210,7 @@ test("JSON 백업 다운로드와 확인을 거친 복원이 실제 기록을 �
   await page.getByLabel("JSON 백업 파일 선택", { exact: true }).setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: exported });
   await expect(page.getByRole("status")).toContainText("JSON 백업을 불러왔습니다.");
   await expect(page.getByRole('region', { name: '불러온 백업' })).toContainText('관찰 12건');
-  await navigate(page, "나이스 입력 준비");
+  await navigate(page, "문장 작성·검토");
   await selectStudent(page, "강가람");
   await expect(page.getByLabel("나이스에 입력할 문장", { exact: true })).toHaveValue(backup.drafts[0].content);
   await expect(page.locator(".editor-title").getByText("반영 확인", { exact: true })).toBeVisible();
@@ -233,7 +234,7 @@ test("1MB보다 큰 유효한 가상 기록도 JSON 내보내기와 다시 불�
   await expect(page.getByRole("region", { name: "불러온 백업" })).toContainText("관찰 52건");
 
   const downloaded = page.waitForEvent("download");
-  await page.getByRole("button", { name: "JSON 백업 내려받기", exact: true }).click();
+  await page.getByRole("button", { name: "전체 기록 백업 파일 내려받기", exact: true }).click();
   const exported = await readFile((await (await downloaded).path())!);
   expect(exported.byteLength).toBeGreaterThan(1024 * 1024);
   expect(JSON.parse(exported.toString("utf8"))).toEqual(workspace);
@@ -251,7 +252,7 @@ test("1MB보다 큰 유효한 가상 기록도 JSON 내보내기와 다시 불�
 test('JSON 파일을 읽는 동안 추가한 기록은 복원으로 덮어쓰지 않는다', async ({ page }) => {
   await navigate(page, '설정 및 백업');
   const downloaded = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'JSON 백업 내려받기', exact: true }).click();
+  await page.getByRole('button', { name: '전체 기록 백업 파일 내려받기', exact: true }).click();
   const file = await readFile((await (await downloaded).path())!);
   await page.evaluate(() => {
     const original = File.prototype.text;
@@ -301,7 +302,7 @@ test("나이스 인증키가 없으면 503과 연결 준비 안내를 표시한�
 });
 
 test("없는 관찰 근거는 직접 해제하고 새 근거를 연결해 검토할 수 있다", async ({ page }) => {
-  await navigate(page, "나이스 입력 준비");
+  await navigate(page, "문장 작성·검토");
   await selectStudent(page, "오해솔");
   const editor = page.getByLabel("나이스에 입력할 문장", { exact: true });
   await expect(editor).toBeDisabled();
@@ -333,4 +334,23 @@ test("손상된 브라우저 저장 원문을 복구 사본으로 내려받을 �
   expect(filePath).not.toBeNull();
   expect(await readFile(filePath!, "utf8")).toBe(damaged);
   await expect(page.getByRole("heading", { name: "선생님, 오늘도 반갑습니다", level: 1 })).toBeVisible();
+});
+
+test("지원하지 않는 미래 기록 형식은 원문을 보존하고 예시 fallback의 자동 저장과 교체를 차단한다", async ({ page }) => {
+  const raw = JSON.stringify({ ...createDemoWorkspace(), version: 4,
+    semesterPreparation: { classroom: createDemoWorkspace().classroom, subject: "체육",
+      entries: { "student-7": { content: "보관해야 할 가상 미래 의견.", reviewedSnapshot: null } } } });
+  const key = workspaceStorageKey(null);
+  await page.evaluate(({ key, raw }) => localStorage.setItem(key, raw), { key, raw });
+  await page.reload();
+  await expect(page.getByText("자동 저장 일시 중지", { exact: true })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("기존 원본은 브라우저에 그대로 보존");
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "복구 사본 다운로드", exact: true }).click();
+  const filePath = await (await downloadPromise).path();
+  expect(await readFile(filePath!, "utf8")).toBe(raw);
+  await page.getByRole("button", { name: "학급 · 명부", exact: true }).click();
+  await expect(page.getByRole("button", { name: "빈 가상 학급으로 시작하기", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "학급 정보 저장", exact: true })).toBeDisabled();
+  expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(raw);
 });

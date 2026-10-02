@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "r
 import { Download, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { addStudents, editStudent, removeStudent, updateClassroom, type Classroom, type Student, type WorkspaceData } from "@/lib/domain";
 import { exportRoster, parseRoster, type RosterEntry } from "@/lib/roster";
+import { replaceWorkspaceFromSnapshot } from "@/lib/workspace-start";
+import WorkspaceStartPanel from "./workspace-start-panel";
 
 type Props = {
   data: WorkspaceData;
@@ -77,9 +79,17 @@ export default function ClassroomPanel({ data, onChange, onToast }: Props) {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
   }
+  function replaceStart(snapshot: WorkspaceData, replacement: WorkspaceData) {
+    onChange(current => replaceWorkspaceFromSnapshot(current, snapshot, replacement));
+    fileRevision.current++;
+    setClassroom(replacement.classroom); setEditing(null); setNumber(""); setName("");
+    setText(""); setPreview(null); setReading(false); setError("");
+    onToast(replacement.students.length ? "예시 학급으로 바꿨습니다." : "빈 가상 학급으로 바꿨습니다. 가상 학생 명부를 추가해 주세요.");
+  }
   return <div className="classroom-panel stack">
     <div className="page-heading"><div><div className="eyebrow">우리 반을 준비하는 첫 단계</div><h1>학급 · 명부</h1><p>학급 정보를 정하고 가상 학생 명부로 기록 흐름을 연습하세요.</p></div><span className="badge neutral"><Users size={16} /> {data.students.length}명</span></div>
     {error && <p role="alert" className="notice error">{error}</p>}
+    <WorkspaceStartPanel data={data} onReplace={replaceStart}/>
     <section className="card classroom-card"><h2>학급 정보</h2><p className="muted">현재 기록의 학급 표시를 수정합니다. 새 학년의 별도 기록 공간은 아직 제공하지 않습니다.</p>
       <form onSubmit={saveClassroom}>
         <div className="classroom-fields">
@@ -90,6 +100,17 @@ export default function ClassroomPanel({ data, onChange, onToast }: Props) {
         </div><button className="button primary" type="submit">학급 정보 저장</button>
       </form>
     </section>
+    <section className="card classroom-card stack"><h2>명부 한 번에 추가</h2>
+      <p className="muted">엑셀의 번호·이름 두 열을 복사해 아래에 붙여넣으세요. 미리보기로 확인한 학생만 추가하며 기존 기록은 유지합니다. 가상 학생 이름으로 연습하세요.</p>
+      <label className="field">명부 붙여넣기<textarea rows={5} maxLength={100000} value={text} disabled={reading} placeholder={'번호\t이름\n1\t가상하나\n2\t가상둘'} onChange={event => { fileRevision.current++; setText(event.target.value); setPreview(null); setError(""); }}/></label>
+      <label className="field">명부 파일<input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={event => void readFile(event)} disabled={reading}/></label>
+      <p className="muted">파일을 사용한다면 엑셀에서 CSV UTF-8로 저장하세요. 같은 번호가 이미 있으면 기존 학생을 바꾸지 않고 확인을 요청합니다.</p>
+      <div><button className="button secondary" disabled={reading} onClick={() => run(() => { setPreview(null); checkText(text); })}>{reading ? "명부 읽는 중…" : "명부 미리보기"}</button></div>
+      {preview && <div className="roster-preview"><h3>추가할 학생 {preview.length}명</h3><ul>{preview.map(student => <li key={student.number}>{student.number}번 {student.name}</li>)}</ul><button className="button primary" onClick={() => run(() => {
+        onChange(current => addStudents(current, preview.map(student => ({ ...student, id: crypto.randomUUID() }))));
+        onToast(`${preview.length}명을 추가했습니다. 기존 기록은 유지됩니다.`); setPreview(null); setText("");
+      })}>미리본 학생 추가</button></div>}
+    </section>
     <section className="card classroom-card"><h2>{editing ? "학생 정보 수정" : "학생 추가"}</h2>
       <form onSubmit={saveStudent} className="student-form">
         <label className="field">학생 번호<input ref={numberInput} type="number" min="1" max="999" required value={number} onChange={event => setNumber(event.target.value)} /></label>
@@ -99,10 +120,12 @@ export default function ClassroomPanel({ data, onChange, onToast }: Props) {
       </form>
     </section>
     <section className="card classroom-card"><div className="section-heading"><h2>우리 반 명부</h2><button className="button secondary" onClick={download} disabled={!data.students.length}><Download size={16}/>명부 CSV 내려받기</button></div>
-      <p className="muted">관찰이나 초안이 연결된 학생은 삭제하지 않습니다. 이름 변경 시 문장은 원문을 유지하고 재검토 상태로 바뀝니다.</p>
+      <p className="muted">관찰이나 작성 문장이 연결된 학생은 삭제하지 않습니다. 작성 문장 수에는 학기말에 적은 내용도 포함합니다. 이름 변경 시 문장은 원문을 유지하고 재검토 상태로 바뀝니다.</p>
       <div className="table-scroll"><table className="roster-table"><thead><tr><th>번호</th><th>이름</th><th>관찰 / 초안</th><th>관리</th></tr></thead><tbody>{data.students.map(student => {
         const observations = data.observations.filter(item => item.studentId === student.id).length;
-        const drafts = data.drafts.filter(item => item.studentId === student.id).length;
+        const semesterEntries = data.semesterPreparation?.entries;
+        const semesterDraft = semesterEntries && Object.hasOwn(semesterEntries, student.id) && semesterEntries[student.id].content.trim() ? 1 : 0;
+        const drafts = data.drafts.filter(item => item.studentId === student.id).length + semesterDraft;
         return <tr key={student.id}><td>{student.number}</td><td>{student.name}</td><td>{observations} / {drafts}</td><td><div className="row">
           <button className="icon-button" aria-label={`${student.number}번 ${student.name} 정보 수정`} onClick={() => { setEditing(student); setNumber(String(student.number)); setName(student.name); numberInput.current?.focus(); }}><Pencil size={16}/></button>
           <button className="icon-button" aria-label={`${student.number}번 ${student.name} 삭제`} disabled={!!observations || !!drafts} onClick={() => run(() => {
@@ -112,17 +135,7 @@ export default function ClassroomPanel({ data, onChange, onToast }: Props) {
             onToast("명부에서 삭제했습니다.");
           })}><Trash2 size={16}/></button></div></td></tr>;
       })}</tbody></table></div>
-      {!data.students.length && <p className="empty-state">학생을 추가하거나 아래에서 명부를 가져오세요.</p>}
-    </section>
-    <section className="card classroom-card stack"><h2>명부 한 번에 추가</h2>
-      <p className="muted">엑셀의 번호·이름 두 열을 복사해 붙여넣거나 CSV UTF-8 파일을 선택하세요. 기존 학생과 기록을 유지하고 새 학생만 추가합니다.</p>
-      <label className="field">명부 파일<input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={event => void readFile(event)} disabled={reading}/></label>
-      <label className="field">명부 붙여넣기<textarea rows={5} maxLength={100000} value={text} disabled={reading} placeholder={'번호,이름\n9,가상하나\n10,가상둘'} onChange={event => { fileRevision.current++; setText(event.target.value); setPreview(null); setError(""); }}/></label>
-      <div><button className="button secondary" disabled={reading} onClick={() => run(() => { setPreview(null); checkText(text); })}>{reading ? "명부 읽는 중…" : "명부 미리보기"}</button></div>
-      {preview && <div className="roster-preview"><h3>추가할 학생 {preview.length}명</h3><ul>{preview.map(student => <li key={student.number}>{student.number}번 {student.name}</li>)}</ul><button className="button primary" onClick={() => run(() => {
-        onChange(current => addStudents(current, preview.map(student => ({ ...student, id: crypto.randomUUID() }))));
-        onToast(`${preview.length}명을 추가했습니다. 기존 기록은 유지됩니다.`); setPreview(null); setText("");
-      })}>미리본 학생 추가</button></div>}
+      {!data.students.length && <p className="empty-state">위에서 명부를 붙여넣거나 학생을 한 명씩 추가하세요.</p>}
     </section>
   </div>;
 }

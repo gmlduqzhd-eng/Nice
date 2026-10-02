@@ -8,12 +8,12 @@ const selection = '7번 백아람 학기말 작업 선택';
 
 async function openSemester(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: '나이스 작업 도우미', exact: true }).click();
+  await page.getByRole('button', { name: '나이스로 옮기기', exact: true }).click();
   await page.getByRole('button', { name: '학기말 종합의견', exact: true }).click();
   await page.getByLabel('작업 학년', { exact: true }).selectOption('5');
   await page.getByLabel('작업 반', { exact: true }).fill('1');
   await page.getByLabel('작업 학기', { exact: true }).selectOption('2');
-  await page.getByLabel('작업 교과', { exact: true }).fill('체육');
+  await page.getByLabel('작업 교과', { exact: true }).selectOption('체육');
   await page.getByLabel('학기말 작성 학생').selectOption('student-7');
 }
 
@@ -47,7 +47,7 @@ test('separate semester review exports a grade 5 term 2 subject job and fills on
   await expect(page.getByText('아직 가상 학기말 저장하지 않았습니다.', { exact: true })).toBeVisible();
 });
 
-test('semester tab retains temporary text and context or text changes invalidate review and export', async ({ page }) => {
+test('saved semester text survives reload and context or text changes invalidate review and export', async ({ page }) => {
   await openSemester(page);
   await page.getByRole('textbox', { name: opinion, exact: true }).fill(content);
   await page.getByLabel(review, { exact: true }).check();
@@ -67,8 +67,35 @@ test('semester tab retains temporary text and context or text changes invalidate
   await expect(page.getByLabel(review, { exact: true })).not.toBeChecked();
   await expect(page.getByLabel(selection, { exact: true })).toBeDisabled();
   await page.reload();
-  await page.getByRole('button', { name: '나이스 작업 도우미', exact: true }).click();
+  await page.getByRole('button', { name: '나이스로 옮기기', exact: true }).click();
   await page.getByRole('button', { name: '학기말 종합의견', exact: true }).click();
   await page.getByLabel('학기말 작성 학생').selectOption('student-7');
-  await expect(page.getByRole('textbox', { name: opinion, exact: true })).toHaveValue('');
+  await expect(page.getByRole('textbox', { name: opinion, exact: true })).toHaveValue(`${content} 가상 수정 문장.`);
+  await expect(page.getByLabel('작업 교과', { exact: true })).toHaveValue('체육');
+  await expect(page.getByLabel('작업 학기', { exact: true })).toHaveValue('2');
+  await expect(page.getByLabel(review, { exact: true })).not.toBeChecked();
+  await expect(page.getByLabel(selection, { exact: true })).toBeDisabled();
+});
+
+test('unreviewed semester draft persists across menus and reload while missing subject is explained once', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '나이스로 옮기기', exact: true }).click();
+  await page.getByRole('button', { name: '학기말 종합의견', exact: true }).click();
+  await page.getByLabel('학기말 작성 학생').selectOption('student-7');
+  await page.getByRole('textbox', { name: opinion, exact: true }).fill(content);
+  await expect(page.getByText('작업 교과를 선택해 주세요.', { exact: true })).toHaveCount(1);
+  await expect(page.getByLabel(review, { exact: true })).toBeDisabled();
+  await expect(page.getByLabel(selection, { exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '관찰 노트', exact: true }).click();
+  await page.getByRole('button', { name: '나이스로 옮기기', exact: true }).click();
+  await page.getByRole('button', { name: '학기말 종합의견', exact: true }).click();
+  await page.getByLabel('학기말 작성 학생').selectOption('student-7');
+  await expect(page.getByRole('textbox', { name: opinion, exact: true })).toHaveValue(content);
+  await page.reload();
+  await page.getByRole('button', { name: '나이스로 옮기기', exact: true }).click();
+  await page.getByRole('button', { name: '학기말 종합의견', exact: true }).click();
+  await page.getByLabel('학기말 작성 학생').selectOption('student-7');
+  await expect(page.getByRole('textbox', { name: opinion, exact: true })).toHaveValue(content);
+  await expect(page.getByLabel('작업 교과', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel(review, { exact: true })).not.toBeChecked();
 });

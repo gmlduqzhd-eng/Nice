@@ -6,10 +6,16 @@ import { createNeisJob, getNeisCandidates } from '@/lib/neis-job';
 import type { WorkspaceData } from '@/lib/domain';
 import NeisSemesterJobPanel from './neis-semester-job-panel';
 
-export default function NeisJobPanel({ data, onReview }: { data: WorkspaceData; onReview: (id: string) => void }) {
-  const [task, setTask] = useState<'behavior' | 'semester'>('behavior');
+export default function NeisJobPanel({ data, onChange, onReview, initialTask = 'behavior', initialStudentId }: {
+  data: WorkspaceData;
+  onChange: (update: WorkspaceData | ((current: WorkspaceData) => WorkspaceData)) => boolean;
+  onReview: (id: string) => void;
+  initialTask?: 'behavior' | 'semester';
+  initialStudentId?: string;
+}) {
+  const [task, setTask] = useState<'behavior' | 'semester'>(initialTask);
   const candidates = useMemo(() => getNeisCandidates(data), [data]);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(() => initialStudentId && candidates.some(item => item.student.id === initialStudentId && item.ready) ? [initialStudentId] : []);
   const [message, setMessage] = useState('');
   const ready = candidates.filter(item => item.ready);
   // Recompute against current records: edits must not leave stale eligible selections.
@@ -29,7 +35,7 @@ export default function NeisJobPanel({ data, onReview }: { data: WorkspaceData; 
       <button type="button" className={task === 'semester' ? 'selected' : ''} aria-pressed={task === 'semester'} onClick={() => setTask('semester')}>학기말 종합의견</button>
     </div>
     <div hidden={task !== 'behavior'}><div className="stack">
-    <div className="page-heading"><div><div className="eyebrow">행동특성 및 종합의견 · 입력 보조</div><h1>나이스 작업 도우미</h1><p>검토한 문장을 모아, 화면의 학급·학생과 대조한 뒤 입력합니다.</p></div></div>
+    <div className="page-heading"><div><div className="eyebrow">검토한 문장 · 입력 보조</div><h1>나이스로 옮기기</h1><p>검토한 문장을 모아, 화면의 학급·학생과 대조한 뒤 입력합니다.</p></div></div>
     <div className="notice notice-block"><strong>현재는 가상 자료로 검증하는 개발 버전입니다.</strong><p>실제 나이스 화면 호환성은 아직 검증하지 않았습니다. 화면 입력과 나이스 저장은 별개이며, 확장프로그램은 저장 버튼을 누르지 않습니다. 실제 학생 자료는 입력하지 마세요.</p></div>
     <section className="card classroom-card stack"><h2>1. 작업할 문장 선택</h2><p className="muted">검토 완료 또는 복사됨 상태이고 점검 문제가 없는 학생만 선택할 수 있습니다. 내려받은 후 문장·근거·학급을 수정했다면 새 작업 파일을 만드세요.</p>
       <div className="row between"><span className="badge"><ListChecks size={14}/>준비된 학생 {ready.length}명 / 전체 {candidates.length}명</span><button className="button secondary" disabled={!ready.length} onClick={() => setSelected(ready.map(item => item.student.id))}>준비된 학생 모두 선택</button></div>
@@ -51,6 +57,6 @@ export default function NeisJobPanel({ data, onReview }: { data: WorkspaceData; 
       <p className="muted">‘일반 입력칸 후보’는 화면 구조의 점검 결과입니다. 실제 나이스 입력·저장 호환성 확인은 별도로 진행합니다. 인증서와 비밀번호는 직접 사용하며 공유하지 마세요.</p>
     </section>
     </div></div>
-    <div hidden={task !== 'semester'}><NeisSemesterJobPanel data={data}/></div>
+    <div hidden={task !== 'semester'}><NeisSemesterJobPanel data={data} onChange={onChange}/></div>
   </div>;
 }

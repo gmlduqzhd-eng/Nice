@@ -2,7 +2,7 @@ import type { WorkspaceData } from "./domain";
 
 /** Every person, observation and workflow state in this fixture is fictional. */
 export const DEMO_WORKSPACE: WorkspaceData = {
-  version: 2,
+  version: 3,
   classroom: { year: 2026, grade: 4, room: "2", semester: 2 },
   students: [
     { id: "student-1", number: 1, name: "강가람" },

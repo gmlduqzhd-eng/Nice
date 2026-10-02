@@ -8,7 +8,7 @@ async function prepare(page: Page, baseURL: string) {
   const auth = await mockSupabase(page, baseURL);
   await auth.completeMagicLink();
   await page.getByRole('button', { name: '계정 알림 닫기', exact: true }).click();
-  await page.getByRole('navigation', { name: '주 메뉴' }).getByRole('button', { name: '나이스 입력 준비', exact: true }).click();
+  await page.getByRole('navigation', { name: '주 메뉴' }).getByRole('button', { name: '문장 작성·검토', exact: true }).click();
   await expect(editor(page)).toBeVisible();
   return auth;
 }
@@ -44,7 +44,7 @@ test('keywords produce a preview; only applying replaces the draft and resets re
   expect(calls).toBe(1);
   await page.reload();
   await page.getByRole('button', { name: '메뉴 열기', exact: true }).click();
-  await page.getByRole('navigation', { name: '주 메뉴' }).getByRole('button', { name: '나이스 입력 준비', exact: true }).click();
+  await page.getByRole('navigation', { name: '주 메뉴' }).getByRole('button', { name: '문장 작성·검토', exact: true }).click();
   await expect(editor(page)).toHaveValue(sentence);
 });
 
@@ -111,7 +111,7 @@ test('guest AI action opens login without sending any generation request', async
   let calls = 0;
   await page.route('**/api/ai/draft', route => { calls += 1; return route.abort(); });
   await page.goto('/');
-  await page.getByRole('navigation', { name: '주 메뉴' }).getByRole('button', { name: '나이스 입력 준비', exact: true }).click();
+  await page.getByRole('navigation', { name: '주 메뉴' }).getByRole('button', { name: '문장 작성·검토', exact: true }).click();
   await editor(page).fill(keywords);
   await page.getByRole('button', { name: 'AI 생성', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
