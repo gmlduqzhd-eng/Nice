@@ -27,7 +27,7 @@ const panel = (page: Page) => page.locator('#damim-neis-helper');
 
 test('reviewed job export feeds the actual packaged content script without changing draft status', async ({ page }, testInfo) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '나이스 작업 도우미', exact: true }).click();
+  await page.getByRole('button', { name: '나이스로 옮기기', exact: true }).click();
   await expect(page.getByLabel('4번 한도담 작업 선택')).toBeDisabled();
   await page.getByRole('button', { name: '준비된 학생 모두 선택' }).click();
   const download = page.waitForEvent('download');
@@ -126,7 +126,7 @@ test('invalid import clears the old job and closing removes listeners and data',
 test('job screen fits a 390px viewport and supplies the packaged download', async ({ page, request }) => {
   await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/');
   await page.getByRole('button', { name: '메뉴 열기', exact: true }).click();
-  await page.getByRole('button', { name: '나이스 작업 도우미', exact: true }).click();
+  await page.getByRole('button', { name: '나이스로 옮기기', exact: true }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const response = await request.get('/downloads/damim-neis-helper.zip');
   expect(response.ok()).toBe(true); expect((await response.body()).readUInt32LE(0)).toBe(0x04034b50);
@@ -134,13 +134,13 @@ test('job screen fits a 390px viewport and supplies the packaged download', asyn
 
 test('deployed web launcher uses packaged scripts and fills through automatic practice mapping', async ({ page, request }, testInfo) => {
   for (const name of ['core.js', 'content.js']) {
-    const response = await request.get(`/neis-helper/${name}?v=0.5.1`);
+    const response = await request.get(`/neis-helper/${name}?v=0.6.0`);
     expect(response.ok()).toBe(true);
     expect((await response.text()).replace(/\r\n/g, '\n')).toBe((await readFile(path.join(extension, name), 'utf8')).replace(/\r\n/g, '\n'));
   }
   await page.goto('/neis-practice');
   await page.getByRole('button', { name: '웹 연습 도우미 열기', exact: true }).click();
-  await expect(panel(page).getByText(/0.5.1 · 웹 연습/)).toBeVisible();
+  await expect(panel(page).getByText(/0.6.0 · 웹 연습/)).toBeVisible();
   await panel(page).getByLabel('작업 JSON 파일').setInputFiles({ name: 'job.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(job())) });
   await panel(page).getByRole('button', { name: '연습 화면 항목 자동 지정' }).click();
   await expect(panel(page).getByRole('button', { name: '대조한 빈칸에 입력' })).toBeDisabled();

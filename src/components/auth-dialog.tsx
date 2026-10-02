@@ -155,6 +155,11 @@ export default function AuthDialog({ initialMessage, onClose, resendTimes }: Pro
         <p className={styles.eyebrow}>담임노트 계정</p>
         <h2 id="auth-dialog-title" ref={headingRef} tabIndex={-1}>{googleAuthEnabled ? "간편하게 시작하기" : "이메일로 시작하기"}</h2>
         <p id="auth-dialog-description" className={styles.description}>{googleAuthEnabled ? <>Google 계정을 선택하면 시작할 수 있어요.<br />처음이라면 가입도 함께 진행해요.</> : <>비밀번호 없이, 이메일 하나로.<br />처음이라면 가입까지 한 번에 진행해요.</>}</p>
+        <div className={styles.availability}>
+          <strong>체험 기록을 계정으로 옮기려면</strong>
+          <p>로그인 전 기록은 이 PC의 체험 공간에 남고 계정으로 자동 이전되지 않습니다. ‘설정 및 백업’에서 전체 기록 백업 파일을 내려받은 뒤 로그인하고, 그 파일을 불러오세요.</p>
+          <p>다른 PC에서 이어하려면 로그인 후 ‘클라우드에 저장’을 누르세요. 다른 PC에서는 같은 계정으로 로그인하고 ‘클라우드에서 불러오기’를 직접 눌러야 합니다.</p>
+        </div>
         {isSupabaseConfigured && <p className={styles.availability}>{googleAuthEnabled ? "이메일 로그인은 테스트 계정만 이용할 수 있어요." : "현재 이메일 로그인은 테스트 계정만 이용할 수 있어요. 로그인 없이 기록 기능을 먼저 체험해 보세요."}</p>}
 
         {!isSupabaseConfigured ? (

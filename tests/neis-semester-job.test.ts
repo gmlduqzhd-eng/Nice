@@ -2,10 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { createDemoWorkspace } from '../src/lib/demo';
-import type { Student } from '../src/lib/domain';
+import { addStudents, editStudent, parseWorkspace, removeStudent, type Student, type WorkspaceData } from '../src/lib/domain';
+import { serializeJsonBackup } from '../src/lib/json-backup';
+import { readWorkspace, saveWorkspace, workspaceStorageKey, WorkspaceConflict } from '../src/lib/workspace-storage';
 import {
   createNeisSemesterJob, createSemesterEntries, getSemesterCandidates, invalidateSemesterReviews,
-  normalizeSemesterContext, reviewSemesterEntry, updateSemesterContent, type NeisSemesterContext,
+  getSemesterPreparation, getSemesterTaskError, normalizeSemesterContext, reviewSemesterEntry, reviewSemesterWorkspaceEntry,
+  updateSemesterContent, updateSemesterWorkspaceContent, updateSemesterWorkspaceContext, type NeisSemesterContext,
 } from '../src/lib/neis-semester-job';
 
 const require = createRequire(import.meta.url);
@@ -32,6 +35,125 @@ test('semester export starts empty and requires its own manually reviewed text',
   });
   assert.deepEqual(core.parseJob(JSON.stringify(exported), clock.getTime()), exported);
   assert.deepEqual(data, before);
+});
+
+test('semester unreviewed drafts and unfinished context survive complete JSON backup without changing legacy workspaces', () => {
+  const initial = createDemoWorkspace();
+  let data = updateSemesterWorkspaceContent(initial, 'student-7', '아직 검토하지 않은 가상 체육 의견.');
+  data = updateSemesterWorkspaceContext(data, { classroom: { ...data.classroom, year: 0, room: '' }, subject: '' });
+  const restored = parseWorkspace(JSON.parse(serializeJsonBackup(data)))!;
+  assert.deepEqual(restored, data);
+  assert.equal(restored.semesterPreparation!.entries['student-7'].reviewedSnapshot, null);
+  assert.equal(getSemesterPreparation(restored).classroom.year, 0);
+  assert.equal(getSemesterCandidates(restored.students, getSemesterPreparation(restored), getSemesterPreparation(restored).entries)[6].ready, false);
+  assert.deepEqual(restored.drafts, initial.drafts);
+  assert.ok(!Object.hasOwn(parseWorkspace(initial)!, 'semesterPreparation'));
+  const legacy = { version: 1, students: initial.students, observations: initial.observations, drafts: initial.drafts };
+  assert.ok(parseWorkspace(legacy));
+  assert.ok(!Object.hasOwn(parseWorkspace(legacy)!, 'semesterPreparation'));
+});
+
+test('semester parser bounds and whitelists optional saved fields and refuses broken references', () => {
+  const data = updateSemesterWorkspaceContent(createDemoWorkspace(), 'student-7', '가상 의견 초안.');
+  const task = data.semesterPreparation!;
+  for (const changed of [null, { ...task, entries: [] }, { ...task, subject: 'a'.repeat(41) },
+    { ...task, classroom: { ...task.classroom, year: null } },
+    { ...task, entries: { absent: { content: '가상 의견', reviewedSnapshot: null } } },
+    { ...task, entries: { 'student-7': { content: 'a'.repeat(6001), reviewedSnapshot: null } } },
+    { ...task, entries: { 'student-7': { content: '가상 의견', reviewedSnapshot: true } } },
+  ]) assert.equal(parseWorkspace({ ...data, semesterPreparation: changed }), null);
+  const parsed = parseWorkspace({ ...data, semesterPreparation: { ...task, secret: 'synthetic-discarded',
+    classroom: { ...task.classroom, secret: 'synthetic-discarded' },
+    entries: { 'student-7': { ...task.entries['student-7'], secret: 'synthetic-discarded' } } } })!;
+  assert.deepEqual(Object.keys(parsed.semesterPreparation!).sort(), ['classroom', 'entries', 'subject']);
+  assert.deepEqual(Object.keys(parsed.semesterPreparation!.entries['student-7']).sort(), ['content', 'reviewedSnapshot']);
+  parsed.semesterPreparation!.entries['student-7'].content = '변경한 가상 의견';
+  assert.equal(task.entries['student-7'].content, '가상 의견 초안.');
+});
+
+function savedReviewedSemester(): WorkspaceData {
+  let data = updateSemesterWorkspaceContext(createDemoWorkspace(), context());
+  data = updateSemesterWorkspaceContent(data, 'student-7', '가상 체육에서 규칙을 지키며 활동함.');
+  return reviewSemesterWorkspaceEntry(data, 'student-7', true);
+}
+
+test('saved semester review survives restoration but only reviewed selected students enter a job', () => {
+  const reviewed = savedReviewedSemester();
+  const data = updateSemesterWorkspaceContent(reviewed, 'student-2', '작성 중인 다른 가상 의견.');
+  const restored = parseWorkspace(JSON.parse(serializeJsonBackup(data)))!;
+  const task = getSemesterPreparation(restored);
+  assert.equal(getSemesterCandidates(restored.students, task, task.entries)[6].ready, true);
+  assert.equal(getSemesterCandidates(restored.students, task, task.entries)[1].ready, false);
+  assert.throws(() => createNeisSemesterJob(restored.students, task, task.entries, ['student-2'], clock));
+  const exported = createNeisSemesterJob(restored.students, task, task.entries, ['student-7'], clock);
+  assert.equal(exported.rows.length, 1);
+  assert.equal(exported.rows[0].number, 7);
+  assert.ok(!Object.hasOwn(exported, 'semesterPreparation'));
+  const changed = updateSemesterWorkspaceContext(restored, { ...task, subject: '다른 가상교과' });
+  const reverted = updateSemesterWorkspaceContext(changed, task);
+  assert.equal(getSemesterCandidates(reverted.students, getSemesterPreparation(reverted), getSemesterPreparation(reverted).entries)[6].reviewed, false);
+  assert.equal(updateSemesterWorkspaceContent(restored, 'student-7', '수정한 가상 의견.').semesterPreparation!.entries['student-7'].reviewedSnapshot, null);
+});
+
+test('roster additions, student number or name edits and removals invalidate persisted semester reviews', () => {
+  const original = savedReviewedSemester();
+  for (const changed of [editStudent(original, 'student-2', 9, original.students[1].name),
+    editStudent(original, 'student-2', 2, '새가상학생'),
+    addStudents(original, [{ id: 'fake-new', number: 9, name: '추가가상학생' }]),
+  ]) {
+    assert.equal(changed.semesterPreparation!.entries['student-7'].reviewedSnapshot, null);
+    assert.equal(changed.semesterPreparation!.entries['student-7'].content, original.semesterPreparation!.entries['student-7'].content);
+    assert.ok(parseWorkspace(changed));
+  }
+  let removable = addStudents(original, [{ id: 'fake-new', number: 9, name: '추가가상학생' }]);
+  removable = updateSemesterWorkspaceContent(removable, 'fake-new', '삭제 대상의 가상 초안.');
+  assert.throws(() => removeStudent(removable, 'fake-new'), /학기말 초안/);
+  removable = updateSemesterWorkspaceContent(removable, 'fake-new', '');
+  const removed = removeStudent(removable, 'fake-new');
+  assert.ok(!Object.hasOwn(removed.semesterPreparation!.entries, 'fake-new'));
+  assert.ok(parseWorkspace(removed));
+});
+
+test('semester drafts use account storage separation and do not bypass conflicts or corrupted-data recovery', () => {
+  const map = new Map<string, string>();
+  const storage = { getItem: (key: string) => map.get(key) ?? null, setItem: (key: string, value: string) => { map.set(key, value); } };
+  const data = savedReviewedSemester();
+  const ownerKey = workspaceStorageKey('synthetic-owner');
+  const raw = saveWorkspace(storage, ownerKey, null, data);
+  assert.deepEqual(readWorkspace(storage, 'synthetic-owner').data, data);
+  assert.ok(!readWorkspace(storage, 'synthetic-other').data.semesterPreparation);
+  assert.ok(!readWorkspace(storage, null).data.semesterPreparation);
+  map.set(ownerKey, `${raw} `);
+  assert.throws(() => saveWorkspace(storage, ownerKey, raw, updateSemesterWorkspaceContent(data, 'student-7', '지연된 가상 변경.')), WorkspaceConflict);
+  assert.equal(map.get(ownerKey), `${raw} `);
+  const broken = JSON.stringify({ ...data, semesterPreparation: { ...data.semesterPreparation, entries: null } });
+  map.set(ownerKey, broken);
+  assert.equal(readWorkspace(storage, 'synthetic-owner').recoveryRaw, broken);
+});
+
+test('whole-task context errors are separate from student-specific issues', () => {
+  const data = createDemoWorkspace();
+  const task = getSemesterPreparation(data);
+  const issue = getSemesterTaskError(data.students, task);
+  assert.match(issue, /교과/);
+  const candidates = getSemesterCandidates(data.students, task, task.entries);
+  assert.ok(candidates.every(candidate => candidate.contextError === issue && !candidate.ready));
+  assert.ok(candidates.every(candidate => !candidate.reasons.includes(issue)));
+  assert.throws(() => reviewSemesterEntry(data.students, task, task.entries, 'student-7'));
+});
+
+test('saved partial semester entries cannot inherit a student entry from object prototype keys', () => {
+  const data: WorkspaceData = { version: 3, classroom: { ...context().classroom },
+    students: [{ id: '__proto__', number: 1, name: '가상학생' }], observations: [], drafts: [],
+    semesterPreparation: { ...context(), entries: {} } };
+  const restored = parseWorkspace(JSON.parse(serializeJsonBackup(data)))!;
+  const task = getSemesterPreparation(restored);
+  assert.equal(getSemesterCandidates(restored.students, task, task.entries)[0].entry.content, '');
+  assert.equal(getSemesterCandidates(restored.students, task, task.entries)[0].ready, false);
+  assert.equal(removeStudent(restored, '__proto__').students.length, 0);
+  const changed = updateSemesterWorkspaceContent(restored, '__proto__', '가상 의견을 작성함.');
+  assert.ok(Object.hasOwn(changed.semesterPreparation!.entries, '__proto__'));
+  assert.equal(changed.semesterPreparation!.entries['__proto__'].content, '가상 의견을 작성함.');
 });
 
 test('semester review becomes invalid after text, context, subject or roster edits', () => {

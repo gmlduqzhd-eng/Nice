@@ -5,7 +5,7 @@ import { JsonBackupSizeError, MAX_JSON_BACKUP_BYTES, serializeJsonBackup } from 
 
 function fictionalWorkspace(observationCount: number): WorkspaceData {
   return {
-    version: 2,
+    version: 3,
     classroom: { year: 2026, grade: 4, room: "2", semester: 2 },
     students: [{ id: "fictional-student", number: 1, name: "가상검증학생" }],
     observations: Array.from({ length: observationCount }, (_, index) => ({

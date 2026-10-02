@@ -74,3 +74,13 @@
 .semester-practice-header { background: #f3f5f9; font-weight: 600; }
 .semester-practice-row textarea { width: 100%; }
 .practice-saved { white-space: pre-wrap; overflow-wrap: anywhere; background: #f3f6ff; margin: 0; padding: 16px; border-left: 3px solid #3555e8; }
+/* Teacher workflow: keep storage location and next actions readable at narrow widths. */
+.storage-location { display: flex; justify-content: space-between; align-items: center; gap: 8px 18px; flex-wrap: wrap; margin: -10px 0 24px; font-size: 12px; line-height: 1.8; color: #52647c; }
+.storage-location .text-button { flex-shrink: 0; min-height: 36px; }
+.guide-classroom { margin: 4px 0 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.guide-classroom .text-button { min-height: 36px; }
+.writing-routes { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; padding: 16px 20px; margin-bottom: 20px; background: #fff; border: 1px solid var(--line); border-radius: 12px; }
+.writing-routes > span { color: #596b84; font-size: 13px; }
+.writing-routes > strong { font-size: 14px; }
+.editor-actions { flex-wrap: wrap; }
+@media(max-width:520px) { .storage-location { margin-top: 0; font-size: 11px; }.writing-routes { padding: 14px; }.writing-routes .button { width: 100%; } }

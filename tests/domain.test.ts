@@ -25,6 +25,7 @@ test("import rejects duplicate identities, unknown students, invalid dates and d
   assert.equal(parseWorkspace(invalidDate), null);
   assert.equal(parseWorkspace({ version: 1, students: {}, observations: [], drafts: [] }), null);
   assert.equal(parseWorkspace(null), null);
+  assert.equal(parseWorkspace({ ...createDemoWorkspace(), version: 4 }), null);
   assert.equal(parseWorkspace({ ...createDemoWorkspace(), version: 99 }), null);
 });
 
