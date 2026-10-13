@@ -40,7 +40,7 @@ test("학급 설정과 명부 추가·수정·보호 삭제 및 백업이 이어
 
 test("CSV와 엑셀 붙여넣기는 미리보기 후에만 적용되며 중복은 원본을 보존한다", async ({ page }) => {
   await page.goto("/"); await openClassroom(page);
-  const input = page.getByLabel("명부 붙여넣기", { exact: true });
+  const input = page.getByRole("textbox", { name: "명부 붙여넣기", exact: true });
   await input.fill("번호\t이름\n1\t가상중복");
   await page.getByRole("button", { name: "명부 미리보기", exact: true }).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText("현재 명부에 있습니다");
@@ -226,4 +226,127 @@ test("미검토 학기말 문장도 명부의 문장 수에 포함하고 학생 
   page.once("dialog", dialog => dialog.accept());
   await remove.click();
   await expect(page.locator(".roster-table tbody tr")).toHaveCount(0);
+});
+
+test("기존 학생을 포함한 전체 명부는 신규 학생만 미리보고 취소하거나 추가한다", async ({ page }) => {
+  await page.goto("/"); await openClassroom(page);
+  const input = page.getByRole("textbox", { name: "명부 붙여넣기", exact: true });
+  const second = createDemoWorkspace().students[1];
+  await input.fill(`번호,이름\n1,강가람\n${second.number},${second.name}\n9,가상아홉`);
+  await page.getByRole("button", { name: "명부 미리보기", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "추가할 학생 1명" })).toBeVisible();
+  await expect(page.locator(".roster-preview")).toContainText("기존 학생 2명은 그대로 유지");
+  await page.getByRole("button", { name: "미리보기 취소", exact: true }).click();
+  await expect(input).toHaveValue(/가상아홉/);
+  await expect(page.locator(".roster-table tbody tr")).toHaveCount(8);
+  await page.getByRole("button", { name: "명부 미리보기", exact: true }).click();
+  await page.getByRole("button", { name: "미리본 학생 추가", exact: true }).click();
+  await expect(page.locator(".roster-table tbody tr")).toHaveCount(9);
+  await input.fill("번호,이름\n1,강가람\n9,가상아홉");
+  await page.getByRole("button", { name: "명부 미리보기", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "새로 추가할 학생이 없습니다" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "미리본 학생 추가", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "가져올 명부 비우기", exact: true }).click();
+  await page.getByRole("navigation", { name: "주 메뉴" }).getByRole("button", { name: "관찰 노트", exact: true }).click();
+  await expect(page.getByText("총 12개의 기록", { exact: true })).toBeVisible();
+});
+
+test("다른 학생 수정과 메뉴 이동을 취소하면 저장하지 않은 학생 입력을 유지한다", async ({ page }) => {
+  await page.goto("/"); await openClassroom(page);
+  await page.getByRole("button", { name: "1번 강가람 정보 수정", exact: true }).click();
+  await page.getByLabel("학생 이름", { exact: true }).fill("가상수정중");
+  const second = createDemoWorkspace().students[1];
+  page.once("dialog", dialog => dialog.dismiss());
+  await page.getByRole("button", { name: `${second.number}번 ${second.name} 정보 수정`, exact: true }).click();
+  await expect(page.getByLabel("학생 이름", { exact: true })).toHaveValue("가상수정중");
+  page.once("dialog", dialog => dialog.dismiss());
+  await page.getByRole("navigation", { name: "주 메뉴" }).getByRole("button", { name: "관찰 노트", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "학급 · 명부", level: 1 })).toBeVisible();
+  await expect(page.getByLabel("학생 이름", { exact: true })).toHaveValue("가상수정중");
+  await page.getByRole("button", { name: "수정 취소", exact: true }).click();
+  await page.getByRole("navigation", { name: "주 메뉴" }).getByRole("button", { name: "관찰 노트", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "관찰 노트", level: 1 })).toBeVisible();
+});
+
+test("학급 표시 저장은 작성 중인 학생과 명부 붙여넣기를 지우지 않는다", async ({ page }) => {
+  await page.goto("/"); await openClassroom(page);
+  await page.getByLabel("학생 번호", { exact: true }).fill("9");
+  await page.getByLabel("학생 이름", { exact: true }).fill("가상작성중");
+  await page.getByRole("textbox", { name: "명부 붙여넣기", exact: true }).fill("번호,이름\n10,가상추가예정");
+  await page.getByLabel("반", { exact: true }).fill("3");
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "학급 정보 저장", exact: true }).click();
+  await expect(page.locator(".class-switch")).toContainText("3반");
+  await expect(page.getByLabel("학생 이름", { exact: true })).toHaveValue("가상작성중");
+  await expect(page.getByRole("textbox", { name: "명부 붙여넣기", exact: true })).toHaveValue("번호,이름\n10,가상추가예정");
+  await page.getByLabel("반", { exact: true }).fill("4");
+  await page.getByRole("button", { name: "학급 변경 취소", exact: true }).click();
+  await expect(page.getByLabel("반", { exact: true })).toHaveValue("3");
+  await expect(page.getByLabel("학생 이름", { exact: true })).toHaveValue("가상작성중");
+});
+
+test("명부를 따로 수정하면 오래된 미리보기를 다시 확인해야 한다", async ({ page }) => {
+  await page.goto("/"); await openClassroom(page);
+  await page.getByRole("textbox", { name: "명부 붙여넣기", exact: true }).fill("번호,이름\n9,가상아홉\n10,가상열");
+  await page.getByRole("button", { name: "명부 미리보기", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "추가할 학생 2명" })).toBeVisible();
+  await page.getByLabel("학생 번호", { exact: true }).fill("9");
+  await page.getByLabel("학생 이름", { exact: true }).fill("가상아홉");
+  await page.getByRole("button", { name: "학생 추가", exact: true }).click();
+  await expect(page.getByRole("button", { name: "미리본 학생 추가", exact: true })).toHaveCount(0);
+  await expect(page.getByText("미리보기 후 현재 명부가 바뀌었습니다. 명부 미리보기를 다시 눌러 확인해 주세요.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "명부 미리보기", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "추가할 학생 1명" })).toBeVisible();
+  await page.getByRole("button", { name: "미리본 학생 추가", exact: true }).click();
+  await expect(page.locator(".roster-table tbody tr")).toHaveCount(10);
+});
+
+test("빈 학급 교체를 취소하면 저장 전 학생 입력과 명부 붙여넣기를 지우지 않는다", async ({ page }) => {
+  await page.goto("/"); await openClassroom(page);
+  await page.getByLabel("학생 번호", { exact: true }).fill("9");
+  await page.getByLabel("학생 이름", { exact: true }).fill("가상작성중");
+  const input = page.getByRole("textbox", { name: "명부 붙여넣기", exact: true });
+  await input.fill("번호,이름\n10,가상보류");
+  await page.getByRole("button", { name: "빈 가상 학급으로 시작하기", exact: true }).click();
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("button", { name: "교체 전 보관 파일 내려받기", exact: true }).click();
+  await downloaded;
+  await page.getByLabel("현재 기록의 보관 파일이 저장된 것을 확인했습니다.", { exact: true }).check();
+  page.once("dialog", dialog => dialog.dismiss());
+  await page.getByRole("button", { name: "빈 가상 학급으로 교체", exact: true }).click();
+  await expect(page.getByRole("region", { name: "가상 학급 시작 방법", exact: true }).getByRole("alert")).toContainText("작성 중인 입력은 유지됩니다");
+  await expect(page.getByLabel("학생 이름", { exact: true })).toHaveValue("가상작성중");
+  await expect(input).toHaveValue("번호,이름\n10,가상보류");
+  await expect(page.getByRole("table").filter({ has: page.getByRole("columnheader", { name: "관찰 / 초안", exact: true }) }).locator("tbody tr")).toHaveCount(8);
+  await page.getByRole("button", { name: "교체 취소", exact: true }).click();
+  await page.getByRole("button", { name: "학생 입력 취소", exact: true }).click();
+  await page.getByRole("button", { name: "가져올 명부 비우기", exact: true }).click();
+  await page.getByRole("navigation", { name: "주 메뉴" }).getByRole("button", { name: "관찰 노트", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "관찰 노트", level: 1 })).toBeVisible();
+});
+
+test("파일 읽기 중 명부가 바뀌면 늦은 파일 미리보기가 이전 명부를 적용하지 않는다", async ({ page }) => {
+  await page.goto("/"); await openClassroom(page);
+  await page.evaluate(() => {
+    const original = File.prototype.arrayBuffer;
+    (window as unknown as { releaseRosterFile: () => void }).releaseRosterFile = () => {};
+    File.prototype.arrayBuffer = function () {
+      return new Promise<ArrayBuffer>(resolve => {
+        (window as unknown as { releaseRosterFile: () => void }).releaseRosterFile = () => {
+          File.prototype.arrayBuffer = original;
+          void original.call(this).then(resolve);
+        };
+      });
+    };
+  });
+  await page.getByLabel("명부 파일", { exact: true }).setInputFiles({ name: "가상보류명부.csv", mimeType: "text/csv", buffer: Buffer.from("번호,이름\n9,가상파일학생") });
+  await expect(page.getByRole("button", { name: "명부 읽는 중…", exact: true })).toBeDisabled();
+  await page.getByLabel("학생 번호", { exact: true }).fill("9");
+  await page.getByLabel("학생 이름", { exact: true }).fill("가상새학생");
+  await page.getByRole("button", { name: "학생 추가", exact: true }).click();
+  await page.evaluate(() => (window as unknown as { releaseRosterFile: () => void }).releaseRosterFile());
+  await expect(page.getByText("파일을 읽는 동안 현재 명부가 바뀌었습니다. 파일을 다시 선택해 확인해 주세요.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "미리본 학생 추가", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("row").filter({ hasText: "가상새학생" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "명부 붙여넣기", exact: true })).toHaveValue("");
 });

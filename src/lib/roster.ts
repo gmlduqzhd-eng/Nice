@@ -2,6 +2,21 @@ import type { Student } from "./domain";
 
 export type RosterEntry = Pick<Student, "number" | "name">;
 
+/** A full class list may include unchanged students; only exact matches are kept. */
+export function prepareRosterImport(entries: RosterEntry[], students: RosterEntry[]) {
+  const existing = new Map(students.map(student => [student.number, student.name.trim()]));
+  const additions: RosterEntry[] = [];
+  let unchanged = 0;
+  for (const student of entries) {
+    const name = existing.get(student.number);
+    if (name === undefined) additions.push(student);
+    else if (name === student.name.trim()) unchanged++;
+    else throw new Error(`${student.number}번은 현재 명부에 있습니다. 이름이 다르므로 추가하지 않았습니다. 기존 학생은 ‘학생 정보 수정’에서 확인하거나 가져올 명부의 번호를 고쳐 주세요.`);
+  }
+  if (students.length + additions.length > 500) throw new Error("현재 명부와 합쳐 500명 이하로 입력해 주세요.");
+  return { additions, unchanged };
+}
+
 /** CSV (including quoted commas/newlines) or tab-separated Excel paste; never evaluate cells. */
 export function parseRoster(text: string): RosterEntry[] {
   if (text.length > 100_000) throw new Error("명부는 100,000자 이하로 입력해 주세요.");

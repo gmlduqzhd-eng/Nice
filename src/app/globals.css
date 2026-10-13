@@ -84,3 +84,23 @@
 .writing-routes > strong { font-size: 14px; }
 .editor-actions { flex-wrap: wrap; }
 @media(max-width:520px) { .storage-location { margin-top: 0; font-size: 11px; }.writing-routes { padding: 14px; }.writing-routes .button { width: 100%; } }
+
+/* Keyboard visibility and comfortable touch targets for teacher workflows. */
+.search-box:focus-within { outline: 3px solid #78a0ff; outline-offset: 2px; }
+.issue-footer-actions { flex-wrap: wrap; justify-content: flex-end; }
+.card-footer { flex-wrap: wrap; align-items: center; }
+.sidebar-close { margin: -12px 0 12px auto; color: #e5ebf7; background: #ffffff12; }
+.main-shell main:focus { outline: none; }
+@media (max-width: 800px) {
+  .skip-link { left: 12px; max-width: calc(100vw - 24px); }
+  .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+  .primary-column, .secondary-column { min-width: 0; }
+  .button, .icon-button, .student-list-item { min-height: 44px; }
+  .icon-button { min-width: 44px; }
+  .text-button { min-height: 40px; }
+  .field input, .field select, .field textarea, .input, .search-box input, .draft-textarea { font-size: 16px; }
+  .sidebar-close { display: inline-flex; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

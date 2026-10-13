@@ -50,12 +50,14 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
   const [remoteUpdatedAt, setRemoteUpdatedAt] = useState<string | null>(null);
   const [confirmedCloudWorkspace, setConfirmedCloudWorkspace] = useState<WorkspaceData | null>(null);
   const [restoredWorkspace, setRestoredWorkspace] = useState<WorkspaceData | null>(null);
+  const [localMessage, setLocalMessage] = useState<{ text: string; error: boolean } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const userIdRef = useRef<string | null>(null);
   const accountRevision = useRef(0);
   const mounted = useRef(false);
   const operationPending = useRef(false);
   const ensureUnchanged = () => { if (!isCurrentWorkspace(data)) throw new LocalBackupChanged(); };
+  const reportLocal = (text: string, error = false) => { setLocalMessage({ text, error }); onToast(text); };
   const matchesConfirmedBackup = useMemo(() => confirmedCloudWorkspace !== null &&
     backupContents(confirmedCloudWorkspace) === backupContents(data), [confirmedCloudWorkspace, data]);
 
@@ -126,7 +128,7 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
         }
         const restored = remoteWorkspace;
         if (!restored) throw new Error("백업 형식 확인 필요");
-        if (!window.confirm(`클라우드 백업으로 현재 기록 공간의 모든 연습 기록을 교체할까요?\n\n현재 기록: ${backupSummary(data)}\n불러올 백업: ${backupSummary(restored)}\n저장 시각: ${savedTime(snapshot.updated_at)}\n\n현재 기록이 필요하면 먼저 JSON 백업을 내려받아 주세요.`)) return;
+        if (!window.confirm(`클라우드 백업으로 현재 기록 공간의 모든 연습 기록을 교체할까요?\n\n현재 기록: ${backupSummary(data)}\n불러올 백업: ${backupSummary(restored)}\n저장 시각: ${savedTime(snapshot.updated_at)}\n\n현재 기록이 필요하면 먼저 JSON 백업을 내려받아 주세요.`)) { if (current()) setCloudMessage("클라우드 백업 복원을 취소했습니다. 현재 기록은 유지됩니다."); return; }
         if (!current()) return;
         ensureUnchanged();
         onReplace(restored);
@@ -137,7 +139,8 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
         const confirmation = snapshot
           ? `이 계정에 ${savedTime(snapshot.updated_at)} 저장한 백업이 있습니다. 현재 기록 공간의 연습 기록으로 덮어쓸까요?`
           : "현재 기록 공간의 연습 기록을 로그인한 계정의 클라우드에 저장할까요? 가상 학생의 연습 데이터만 저장해 주세요.";
-        if (!window.confirm(`${confirmation}\n\n저장할 기록: ${backupSummary(data)}`) || !current()) return;
+        if (!window.confirm(`${confirmation}\n\n저장할 기록: ${backupSummary(data)}`)) { if (current()) setCloudMessage("클라우드 저장을 취소했습니다. 현재 기록과 계정 백업은 유지됩니다."); return; }
+        if (!current()) return;
         ensureUnchanged();
         const savedAt = await saveCloudBackup(client, expectedUserId, data, snapshot?.updated_at ?? null);
         if (!current()) return;
@@ -175,9 +178,9 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
       anchor.click();
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      onToast("JSON 백업 다운로드를 시작했습니다.");
+      reportLocal("JSON 백업 다운로드를 시작했습니다. 다운로드한 파일을 보관해 주세요.");
     } catch (error) {
-      onToast(error instanceof JsonBackupSizeError ? error.message : "백업 파일을 만들지 못했습니다. 다시 시도해 주세요.");
+      reportLocal(error instanceof JsonBackupSizeError ? error.message : "백업 파일을 만들지 못했습니다. 다시 시도해 주세요.", true);
     }
   }
 
@@ -186,9 +189,10 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
     event.target.value = "";
     if (!file || operationPending.current || readOnly) return;
     if (file.size > MAX_JSON_BACKUP_BYTES) {
-      onToast(`${JSON_BACKUP_SIZE_LABEL} 이하의 JSON 백업 파일을 선택해 주세요.`);
+      reportLocal(`${JSON_BACKUP_SIZE_LABEL} 이하의 JSON 백업 파일을 선택해 주세요. 현재 기록은 유지됩니다.`, true);
       return;
     }
+    setLocalMessage(null);
     setImportBusy(true);
     operationPending.current = true;
     const revision = accountRevision.current;
@@ -196,11 +200,15 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
     setRestoredWorkspace(null);
     try {
       ensureUnchanged();
-      const parsed = parseWorkspace(JSON.parse(await file.text()));
+      const input: unknown = JSON.parse(await file.text());
       if (!current()) return;
       ensureUnchanged();
+      if (input !== null && typeof input === 'object' && 'format' in input && input.format === 'damim-neis-job') {
+        reportLocal('선택한 파일은 나이스 입력 작업 파일입니다. 기록 복원에는 ‘전체 기록 백업 파일 내려받기’로 보관한 파일을 사용해 주세요. 현재 기록은 유지됩니다.', true); return;
+      }
+      const parsed = parseWorkspace(input);
       if (!parsed) {
-        onToast("지원하지 않는 백업 형식입니다. 이 앱에서 내보낸 JSON 파일을 선택해 주세요.");
+        reportLocal("지원하지 않는 백업 형식입니다. 이 앱에서 내보낸 전체 기록 JSON 파일을 선택해 주세요. 현재 기록은 유지됩니다.", true);
         return;
       }
       if (window.confirm(`학생 ${parsed.students.length}명의 백업으로 현재 기록 공간의 연습 기록을 모두 교체할까요?\n\n현재 기록: ${backupSummary(data)}\n불러올 백업: ${backupSummary(parsed)}\n\n기존 기록은 먼저 백업해 주세요.`)) {
@@ -208,11 +216,11 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
         ensureUnchanged();
         onReplace(parsed);
         setRestoredWorkspace(parsed);
-        onToast("JSON 백업을 불러왔습니다.");
-      }
+        reportLocal("JSON 백업을 불러왔습니다.");
+      } else reportLocal("JSON 백업 복원을 취소했습니다. 현재 기록은 유지됩니다.");
     } catch (error) {
       if (!current()) return;
-      onToast(error instanceof LocalBackupChanged ? error.message : "백업 파일을 읽지 못했거나 적용하지 못했습니다. 올바른 JSON 파일과 브라우저 저장 상태를 확인해 주세요.");
+      reportLocal(error instanceof LocalBackupChanged ? error.message : "백업 파일을 읽지 못했거나 적용하지 못했습니다. 올바른 JSON 파일과 브라우저 저장 상태를 확인해 주세요. 현재 기록은 유지됩니다.", true);
     } finally {
       operationPending.current = false;
       if (current()) setImportBusy(false);
@@ -221,12 +229,12 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
 
   function resetDemo() {
     if (readOnly || operationPending.current) return;
-    if (!window.confirm("현재 기록 공간의 모든 연습 기록을 처음 예시 데이터로 되돌릴까요? 필요한 기록은 먼저 JSON 백업으로 보관해 주세요. 클라우드 백업은 바뀌지 않습니다.")) return;
+    if (!window.confirm("현재 기록 공간의 모든 연습 기록을 처음 예시 데이터로 되돌릴까요? 필요한 기록은 먼저 JSON 백업으로 보관해 주세요. 클라우드 백업은 바뀌지 않습니다.")) { reportLocal("예시 데이터 초기화를 취소했습니다. 현재 기록은 유지됩니다."); return; }
     try {
       onReplace(createDemoWorkspace());
-      onToast("현재 기록 공간을 가상 학생의 예시 데이터로 초기화했습니다.");
+      reportLocal("현재 기록 공간을 가상 학생의 예시 데이터로 초기화했습니다.");
     } catch (error) {
-      onToast(error instanceof Error ? error.message : "초기화하지 못했습니다. 저장 상태를 확인해 주세요.");
+      reportLocal(error instanceof Error ? error.message : "초기화하지 못했습니다. 저장 상태를 확인해 주세요.", true);
     }
   }
 
@@ -303,6 +311,7 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
           <button type="button" className="button secondary" onClick={() => fileInput.current?.click()} disabled={importBusy || cloudBusy || readOnly}><Upload size={16} aria-hidden="true" /> {importBusy ? "백업 읽는 중…" : "전체 기록 백업 파일 불러오기"}</button>
           <input ref={fileInput} type="file" accept=".json,application/json" hidden aria-label="JSON 백업 파일 선택" onChange={importBackup} disabled={importBusy || cloudBusy || readOnly} />
         </div>
+        {localMessage && <p id="local-backup-result" className={localMessage.error ? "notice error" : "notice"}>{localMessage.text}</p>}
         <p className="muted">지원 형식: 이 앱에서 내보낸 JSON · 최대 {JSON_BACKUP_SIZE_LABEL} · 불러오기 전 교체 여부를 확인합니다.</p>
       </section>
 

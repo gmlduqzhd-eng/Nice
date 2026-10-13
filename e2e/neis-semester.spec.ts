@@ -62,6 +62,7 @@ test('saved semester text survives reload and context or text changes invalidate
   await expect(page.getByRole('button', { name: '선택한 0명 학기말 작업 파일', exact: true })).toBeDisabled();
   await page.getByLabel('작업 학기', { exact: true }).selectOption('2');
   await page.getByLabel(review, { exact: true }).check();
+  await expect(page.getByLabel(selection, { exact: true })).not.toBeChecked();
   await page.getByLabel(selection, { exact: true }).check();
   await page.getByRole('textbox', { name: opinion, exact: true }).fill(`${content} 가상 수정 문장.`);
   await expect(page.getByLabel(review, { exact: true })).not.toBeChecked();
@@ -98,4 +99,53 @@ test('unreviewed semester draft persists across menus and reload while missing s
   await expect(page.getByRole('textbox', { name: opinion, exact: true })).toHaveValue(content);
   await expect(page.getByLabel('작업 교과', { exact: true })).toHaveValue('');
   await expect(page.getByLabel(review, { exact: true })).not.toBeChecked();
+});
+
+test('semester sequential review moves focus without wrapping and clearing job selection preserves saved reviews', async ({ page }) => {
+  await openSemester(page);
+  await page.getByRole('textbox', { name: opinion, exact: true }).fill(content);
+  await page.getByRole('button', { name: '검토하고 다음 학생', exact: true }).click();
+  const lastOpinion = page.getByRole('textbox', { name: /^8번 .+ 학기말 종합의견$/ });
+  await expect(lastOpinion).toBeFocused();
+  await expect(lastOpinion).toHaveValue('');
+  await expect(page.getByLabel(review, { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '검토하고 다음 학생', exact: true })).toBeDisabled();
+  await lastOpinion.fill('가상 체육 수업에서 친구의 설명을 듣고 놀이 순서를 안내함.');
+  await page.getByRole('button', { name: '검토하고 다음 학생', exact: true }).click();
+  await expect(page.getByRole('button', { name: '검토된 학기말 학생 모두 선택', exact: true })).toBeFocused();
+  await expect(page.getByLabel('학기말 작성 학생', { exact: true })).toHaveValue('student-8');
+  await expect(page.getByText('마지막 학생까지 확인했습니다. 검토한 학생을 선택해 작업 파일을 만드세요.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '검토된 학기말 학생 모두 선택', exact: true }).click();
+  await expect(page.getByRole('button', { name: '선택한 2명 학기말 작업 파일', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: '학기말 작업 선택 해제', exact: true }).click();
+  await expect(page.getByRole('button', { name: '선택한 0명 학기말 작업 파일', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '7번 백아람 학기말 문장 작성', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: opinion, exact: true })).toBeFocused();
+  await expect(page.getByLabel(review, { exact: true })).toBeChecked();
+  await expect(page.getByRole('textbox', { name: opinion, exact: true })).toHaveValue(content);
+  await expect(page.getByText('작업 파일 대상: 2026학년도 · 5학년 · 1반 · 2학기 · 체육', { exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: '나이스로 옮기기', exact: true }).click();
+  await page.getByRole('button', { name: '학기말 종합의견', exact: true }).click();
+  await page.getByLabel('학기말 작성 학생', { exact: true }).selectOption('student-7');
+  await expect(page.getByLabel(review, { exact: true })).toBeChecked();
+  await expect(page.getByRole('textbox', { name: opinion, exact: true })).toHaveValue(content);
+  await expect(page.getByLabel(selection, { exact: true })).not.toBeChecked();
+});
+
+test('behavior job selection can be cleared while reviewed text and eligibility stay intact', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '나이스로 옮기기', exact: true }).click();
+  await page.getByRole('button', { name: '준비된 학생 모두 선택', exact: true }).click();
+  await expect(page.getByLabel('7번 백아람 작업 선택', { exact: true })).toBeChecked();
+  await expect(page.getByRole('button', { name: /^선택한 [1-9]\d*명 작업 파일$/ })).toBeEnabled();
+  await page.getByRole('button', { name: '작업 선택 해제', exact: true }).click();
+  await expect(page.getByLabel('7번 백아람 작업 선택', { exact: true })).not.toBeChecked();
+  await expect(page.getByLabel('7번 백아람 작업 선택', { exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '선택한 0명 작업 파일', exact: true })).toBeDisabled();
+  await page.getByLabel('7번 백아람 작업 선택', { exact: true }).check();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: '선택한 1명 작업 파일', exact: true }).click();
+  const file = JSON.parse(await readFile((await (await download).path())!, 'utf8'));
+  expect(file).toMatchObject({ format: 'damim-neis-job', version: 1, rows: [expect.objectContaining({ number: 7, name: '백아람' })] });
 });

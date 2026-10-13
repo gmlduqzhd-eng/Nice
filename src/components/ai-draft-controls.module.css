@@ -4,7 +4,8 @@
 .actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.length{display:flex;align-items:center;gap:8px;font-size:12px;color:#52627d}.length select{max-width:100%;border:1px solid #dbe3f3;border-radius:7px;background:white;padding:9px;color:#33435e;font:inherit;min-height:40px}
 .evidence{display:flex;align-items:center;gap:8px;font-size:12px;color:#4d5e7e;margin-top:14px}.evidence input{width:16px;height:16px;accent-color:#405bde}
 .help{font-size:12px;color:#62718a;line-height:1.8;margin:12px 0 0;overflow-wrap:anywhere}
+.inputIssue{font-size:12px;color:#855522;line-height:1.8;margin:12px 0 0;overflow-wrap:anywhere}.recovery{margin-top:14px}.recovery>.actions{margin-top:12px}.recovery p:focus-visible,.preview h3:focus-visible{outline:2px solid #405bde;outline-offset:4px}
 .preview{margin-top:18px;padding:18px;background:white;border:1px solid #d5dff8;border-radius:9px}.preview h3{font-size:14px}.preview>.actions{margin-top:14px}.result{font-size:14px;line-height:2;white-space:pre-wrap;overflow-wrap:anywhere;margin:16px 0;color:#263957}
 .spinner{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
-@media(max-width:520px){.panel,.preview{padding:13px}.toolbar,.toolbar>.actions{width:100%}.length{flex:1}.length select{flex:1;min-width:0}.preview :global(.row){flex-wrap:wrap}.intro p,.help{font-size:11px}}
+@media(max-width:520px){.panel,.preview{padding:13px}.toolbar,.toolbar>.actions{width:100%}.length{flex:1 1 100%}.length select{flex:1;min-width:0}.actions :global(.button){flex:1 1 auto;min-height:44px;white-space:normal}.preview :global(.row){flex-wrap:wrap}.intro p,.help{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.spinner{animation:none}}

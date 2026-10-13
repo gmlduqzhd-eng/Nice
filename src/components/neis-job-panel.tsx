@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, ExternalLink, ListChecks } from 'lucide-react';
 import { createNeisJob, getNeisCandidates } from '@/lib/neis-job';
 import type { WorkspaceData } from '@/lib/domain';
@@ -17,6 +17,12 @@ export default function NeisJobPanel({ data, onChange, onReview, initialTask = '
   const candidates = useMemo(() => getNeisCandidates(data), [data]);
   const [selected, setSelected] = useState<string[]>(() => initialStudentId && candidates.some(item => item.student.id === initialStudentId && item.ready) ? [initialStudentId] : []);
   const [message, setMessage] = useState('');
+  const selectionContext = JSON.stringify({ classroom: data.classroom, students: data.students });
+  const previousSelectionContext = useRef(selectionContext);
+  useEffect(() => {
+    if (previousSelectionContext.current === selectionContext) return;
+    previousSelectionContext.current = selectionContext; setSelected([]); setMessage('');
+  }, [selectionContext]);
   const ready = candidates.filter(item => item.ready);
   // Recompute against current records: edits must not leave stale eligible selections.
   const eligibleSelection = selected.filter(id => ready.some(item => item.student.id === id));
@@ -38,8 +44,9 @@ export default function NeisJobPanel({ data, onChange, onReview, initialTask = '
     <div className="page-heading"><div><div className="eyebrow">검토한 문장 · 입력 보조</div><h1>나이스로 옮기기</h1><p>검토한 문장을 모아, 화면의 학급·학생과 대조한 뒤 입력합니다.</p></div></div>
     <div className="notice notice-block"><strong>현재는 가상 자료로 검증하는 개발 버전입니다.</strong><p>실제 나이스 화면 호환성은 아직 검증하지 않았습니다. 화면 입력과 나이스 저장은 별개이며, 확장프로그램은 저장 버튼을 누르지 않습니다. 실제 학생 자료는 입력하지 마세요.</p></div>
     <section className="card classroom-card stack"><h2>1. 작업할 문장 선택</h2><p className="muted">검토 완료 또는 복사됨 상태이고 점검 문제가 없는 학생만 선택할 수 있습니다. 내려받은 후 문장·근거·학급을 수정했다면 새 작업 파일을 만드세요.</p>
-      <div className="row between"><span className="badge"><ListChecks size={14}/>준비된 학생 {ready.length}명 / 전체 {candidates.length}명</span><button className="button secondary" disabled={!ready.length} onClick={() => setSelected(ready.map(item => item.student.id))}>준비된 학생 모두 선택</button></div>
-      <div className="table-scroll"><table className="roster-table"><thead><tr><th>선택</th><th>학생</th><th>입력 준비</th><th>확인</th></tr></thead><tbody>{candidates.map(({ student, draft, ready: canSelect, reasons }) => <tr key={student.id}>
+      <p className="muted">작업 파일 대상: {data.classroom.year}학년도 · {data.classroom.grade}학년 · {data.classroom.room.trim() ? `${data.classroom.room.trim()}반` : '반 미입력'} · {data.classroom.semester}학기 · 행동특성 및 종합의견</p>
+      <div className="row between"><span className="badge"><ListChecks size={14} aria-hidden="true"/>준비된 학생 {ready.length}명 / 전체 {candidates.length}명</span><div className="row"><button type="button" className="button secondary" disabled={!ready.length} onClick={() => setSelected(ready.map(item => item.student.id))}>준비된 학생 모두 선택</button><button type="button" className="button secondary" disabled={!eligibleSelection.length} onClick={() => setSelected([])}>작업 선택 해제</button></div></div>
+      <div className="table-scroll"><table className="roster-table"><thead><tr><th scope="col">선택</th><th scope="col">학생</th><th scope="col">입력 준비</th><th scope="col">확인</th></tr></thead><tbody>{candidates.map(({ student, draft, ready: canSelect, reasons }) => <tr key={student.id}>
         <td><input type="checkbox" aria-label={`${student.number}번 ${student.name} 작업 선택`} disabled={!canSelect} checked={canSelect && eligibleSelection.includes(student.id)} onChange={event => setSelected(current => event.target.checked ? [...current.filter(id => id !== student.id), student.id] : current.filter(id => id !== student.id))}/></td>
         <td>{student.number}번 {student.name}</td><td>{canSelect ? `준비됨 · ${Array.from(draft!.content).length}자` : reasons.join(' / ')}</td>
         <td><button className="text-button" onClick={() => onReview(student.id)} aria-label={`${student.name} 문장 확인`}>문장 확인</button></td>
