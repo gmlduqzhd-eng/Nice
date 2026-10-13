@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createDemoWorkspace } from "../src/lib/demo";
 import { addStudents, editStudent, removeStudent, parseWorkspace, updateClassroom } from "../src/lib/domain";
-import { exportRoster, parseRoster } from "../src/lib/roster";
+import { exportRoster, parseRoster, prepareRosterImport } from "../src/lib/roster";
 import { LEGACY_STORAGE_KEY, readWorkspace, saveWorkspace, workspaceStorageKey, WorkspaceConflict } from "../src/lib/workspace-storage";
 
 test("v1 backups migrate without changing students, evidence, text or review state", () => {
@@ -59,6 +59,18 @@ test("CSV and Excel paste handle Korean BOM, quotes and reject invalid or duplic
   assert.deepEqual(parseRoster("번호\t이름\n9\t가상하나\n\n"), [{ number: 9, name: "가상하나" }]);
   for (const text of ['1,하나\n01,둘', '0,하나', '1,하나,기타', '1,"미완성', '1,"닫힘"문자', '1,"줄\n바꿈"', '번호,이름', '1,\0']) assert.throws(() => parseRoster(text), text);
   assert.ok(exportRoster([{ number: 1, name: '=HYPERLINK("https://example.invalid")' }]).includes('"\'=HYPERLINK'));
+});
+
+test("full roster import keeps exact existing students and refuses conflicting names", () => {
+  const existing = [{ number: 1, name: "가상하나" }, { number: 2, name: "가상둘" }];
+  const entries = parseRoster("번호,이름\n1,가상하나\n2,가상둘\n3,가상셋");
+  assert.deepEqual(prepareRosterImport(entries, existing), { additions: [{ number: 3, name: "가상셋" }], unchanged: 2 });
+  assert.deepEqual(prepareRosterImport(entries.slice(0, 2), existing), { additions: [], unchanged: 2 });
+  assert.throws(() => prepareRosterImport([{ number: 1, name: "다른가상학생" }], existing), /이름이 다르므로 추가하지 않았습니다/);
+  const full = Array.from({ length: 500 }, (_, index) => ({ number: index + 1, name: `가상${index}` }));
+  assert.equal(prepareRosterImport(full, full).unchanged, 500);
+  assert.throws(() => prepareRosterImport([{ number: 999, name: "가상추가" }], full), /500명 이하/);
+  assert.deepEqual(existing, [{ number: 1, name: "가상하나" }, { number: 2, name: "가상둘" }]);
 });
 
 function store() {

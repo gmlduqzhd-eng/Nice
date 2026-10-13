@@ -31,6 +31,7 @@ test('keywords produce a preview; only applying replaces the draft and resets re
   await page.getByRole('button', { name: '알림 닫기', exact: true }).click();
   await page.getByRole('button', { name: 'AI 생성', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'AI 생성 초안' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'AI 생성 초안' })).toBeFocused();
   await expect(editor(page)).toHaveValue(keywords);
   await expect(page.getByRole('button', { name: '검토 완료', exact: true })).toBeDisabled();
   await page.screenshot({ path: testInfo.outputPath('ai-draft-desktop.png'), fullPage: true, animations: 'disabled' });
@@ -39,6 +40,7 @@ test('keywords produce a preview; only applying replaces the draft and resets re
   await page.screenshot({ path: testInfo.outputPath('ai-draft-mobile.png'), fullPage: true, animations: 'disabled' });
   await page.getByRole('button', { name: '이 문장 적용', exact: true }).click();
   await expect(editor(page)).toHaveValue(sentence);
+  await expect(editor(page)).toBeFocused();
   await expect(page.getByRole('button', { name: '검토 완료', exact: true })).toBeEnabled();
   await expect(page.getByRole('button', { name: '문장 복사', exact: true })).toBeDisabled();
   expect(calls).toBe(1);
@@ -138,4 +140,85 @@ test('cancelled generation keeps keywords and allows a fresh request', async ({ 
   await page.getByRole('button', { name: 'AI 생성', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'AI 생성 초안' })).toBeVisible();
   expect(calls).toBe(2);
+});
+
+test('keyboard cancellation returns to generation and applying returns to the editor', async ({ page, baseURL }) => {
+  await prepare(page, baseURL!);
+  const release = Promise.withResolvers<void>();
+  let calls = 0;
+  await page.route('**/api/ai/draft', async route => {
+    calls += 1;
+    if (calls === 1) await release.promise;
+    await route.fulfill({ json: { text: sentence } }).catch(() => {});
+  });
+  await editor(page).fill(keywords);
+  const generate = page.getByRole('button', { name: 'AI 생성', exact: true });
+  await generate.press('Enter');
+  await expect.poll(() => calls).toBe(1);
+  const cancel = page.getByRole('button', { name: '생성 취소', exact: true });
+  await cancel.focus();
+  await cancel.press('Escape');
+  release.resolve();
+  await expect(generate).toBeFocused();
+  await expect(editor(page)).toHaveValue(keywords);
+  await expect(page.getByRole('heading', { name: 'AI 생성 초안' })).toHaveCount(0);
+  await generate.press('Enter');
+  const heading = page.getByRole('heading', { name: 'AI 생성 초안' });
+  await expect(heading).toBeFocused();
+  await heading.press('Escape');
+  await expect(generate).toBeFocused();
+  await expect(editor(page)).toHaveValue(keywords);
+  await generate.press('Enter');
+  await expect(heading).toBeFocused();
+  await page.keyboard.press('Tab');
+  const apply = page.getByRole('button', { name: '이 문장 적용', exact: true });
+  await expect(apply).toBeFocused();
+  await apply.press('Enter');
+  await expect(editor(page)).toBeFocused();
+  await expect(editor(page)).toHaveValue(sentence);
+  expect(calls).toBe(3);
+});
+
+test('failure offers retry and direct editing while preserving the original keywords', async ({ page, baseURL }) => {
+  await prepare(page, baseURL!);
+  let calls = 0;
+  await page.route('**/api/ai/draft', route => {
+    calls += 1;
+    return calls === 1 ? route.fulfill({ status: 502, json: { code: 'AI_UNAVAILABLE' } }) : route.fulfill({ json: { text: sentence } });
+  });
+  await editor(page).fill(keywords);
+  await page.getByRole('button', { name: 'AI 생성', exact: true }).click();
+  const alert = page.getByRole('region', { name: 'AI 문장 생성' }).getByRole('alert');
+  await expect(alert).toBeFocused();
+  await expect(editor(page)).toHaveValue(keywords);
+  await page.keyboard.press('Tab');
+  const retry = page.getByRole('button', { name: 'AI 생성 다시 시도', exact: true });
+  await expect(retry).toBeFocused();
+  await retry.press('Enter');
+  await expect(page.getByRole('heading', { name: 'AI 생성 초안' })).toBeVisible();
+  await page.getByRole('button', { name: '취소 · 기존 내용 유지', exact: true }).click();
+  await page.route('**/api/ai/draft', route => route.fulfill({ status: 503, json: { code: 'AI_NOT_READY' } }));
+  await page.getByRole('button', { name: 'AI 생성', exact: true }).click();
+  await page.getByRole('button', { name: '기존 문장 직접 다듬기', exact: true }).click();
+  await expect(editor(page)).toBeFocused();
+  await expect(editor(page)).toHaveValue(keywords);
+  await expect(alert).toHaveCount(0);
+});
+
+test('overlong keywords are explained before a request and remain editable', async ({ page, baseURL }) => {
+  await prepare(page, baseURL!);
+  let calls = 0;
+  await page.route('**/api/ai/draft', route => { calls += 1; return route.fulfill({ json: { text: sentence } }); });
+  const longText = '가'.repeat(2001);
+  await editor(page).fill(longText);
+  const panel = page.getByRole('region', { name: 'AI 문장 생성' });
+  await expect(panel).toContainText('현재 2,001자입니다');
+  await expect(page.getByRole('button', { name: 'AI 생성', exact: true })).toBeDisabled();
+  await expect(editor(page)).toHaveValue(longText);
+  expect(calls).toBe(0);
+  await editor(page).fill(keywords);
+  await expect(page.getByRole('button', { name: 'AI 생성', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'AI 생성', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'AI 생성 초안' })).toBeVisible();
+  expect(calls).toBe(1);
 });

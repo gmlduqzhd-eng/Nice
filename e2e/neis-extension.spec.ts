@@ -317,7 +317,7 @@ for (const noticeShape of ['split-inline', 'nonbreaking-spaces'] as const) {
 type DiagnosticReport = {
   format: 'damim-neis-diagnostic';
   schemaVersion: 1;
-  helperVersion: '0.6.0';
+  helperVersion: '0.6.1';
   pageKind: 'neis' | 'practice';
   visibleCounts: { textareas: number; textInputs: number; iframes: number; canvases: number; contenteditables: number };
   selection: {
@@ -347,7 +347,7 @@ async function downloadDiagnostic(page: Page, panel: Locator) {
     'connected', 'editable', 'editableTextControlCount', 'hasEditorRegion', 'kind', 'labelSources', 'visible',
   ]);
   expect(Object.keys(report.selection.labelSources).sort()).toEqual(['ariaLabel', 'ariaLabelledby', 'htmlLabel']);
-  expect(report).toMatchObject({ format: 'damim-neis-diagnostic', schemaVersion: 1, helperVersion: '0.6.0', pageKind: 'practice' });
+  expect(report).toMatchObject({ format: 'damim-neis-diagnostic', schemaVersion: 1, helperVersion: '0.6.1', pageKind: 'practice' });
   const reasonCodes = [
     'FIELD_UNSELECTED', 'FIELD_DISCONNECTED', 'FIELD_NOT_VISIBLE', 'UNSUPPORTED_FIELD', 'FIELD_NOT_EDITABLE',
     'LABEL_CONNECTION_MISSING', 'ARIA_LABELLEDBY_UNVERIFIED', 'EDITOR_REGION_MISSING', 'EDITOR_TEXT_CONTROL_COUNT',
@@ -527,7 +527,7 @@ test('loaded extension diagnoses without a job and exports only structural metad
   expect(await page.evaluate(() => document.activeElement?.id)).toBe(focusedBeforeSelection);
   const selected = await downloadDiagnostic(page, panel);
   expect(selected.report).toEqual({
-    format: 'damim-neis-diagnostic', schemaVersion: 1, helperVersion: '0.6.0', pageKind: 'practice',
+    format: 'damim-neis-diagnostic', schemaVersion: 1, helperVersion: '0.6.1', pageKind: 'practice',
     visibleCounts: { textareas: 1, textInputs: 0, iframes: 0, canvases: 0, contenteditables: 0 },
     selection: {
       kind: 'textarea', connected: true, visible: true, editable: true,

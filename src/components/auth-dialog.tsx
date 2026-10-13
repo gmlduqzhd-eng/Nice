@@ -18,13 +18,13 @@ export default function AuthDialog({ initialMessage, onClose, resendTimes }: Pro
   const dialogRef = useRef<HTMLDialogElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
-  const editingEmail = useRef(false);
   const sentHeadingRef = useRef<HTMLHeadingElement>(null);
   const requestRevision = useRef(0);
   const pending = useRef(false);
   const alive = useRef(false);
   const [email, setEmail] = useState("");
   const [sentEmail, setSentEmail] = useState("");
+  const [emailOpen, setEmailOpen] = useState(!googleAuthEnabled);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(initialMessage);
   const [now, setNow] = useState(() => Date.now());
@@ -56,15 +56,15 @@ export default function AuthDialog({ initialMessage, onClose, resendTimes }: Pro
 
   useEffect(() => {
     if (sentEmail) sentHeadingRef.current?.focus();
-    else (googleAuthEnabled && !editingEmail.current ? headingRef.current : emailRef.current)?.focus();
-  }, [sentEmail]);
+    else (emailOpen ? emailRef.current : headingRef.current)?.focus();
+  }, [sentEmail, emailOpen]);
 
   function changeEmail() {
-    editingEmail.current = true;
     requestRevision.current += 1;
     pending.current = false;
     setBusy(false);
     setSentEmail("");
+    setEmailOpen(true);
     setMessage("");
     setNow(Date.now());
   }
@@ -177,16 +177,22 @@ export default function AuthDialog({ initialMessage, onClose, resendTimes }: Pro
             <button type="button" className={styles.textButton} onClick={changeEmail}><ArrowLeft size={15} aria-hidden="true" /> 다른 이메일 사용</button>
           </div>
         ) : (
-          <form className={styles.form} onSubmit={requestLink}>
-            {googleAuthEnabled && <><GoogleSignIn disabled={busy} onCredential={signInWithGoogle} /><span className={styles.divider}>테스트 계정용 이메일</span></>}
+          <div className={styles.form}>
+            {googleAuthEnabled && <>
+              <GoogleSignIn disabled={busy} onCredential={signInWithGoogle} />
+              <button type="button" className={styles.textButton} aria-expanded={emailOpen} aria-controls="auth-email-form" disabled={busy} onClick={() => { setEmailOpen(value => !value); setMessage(""); }}>테스트 계정 이메일로 로그인</button>
+            </>}
+            <form id="auth-email-form" className={styles.form} onSubmit={requestLink} hidden={!emailOpen}>
+            {googleAuthEnabled && <p className={styles.hint}>이메일 로그인은 등록된 테스트 계정만 사용할 수 있어요. 일반 이용자는 위 Google 버튼을 이용해 주세요.</p>}
             <label className="field" htmlFor="auth-email">이메일 주소
               <input ref={emailRef} id="auth-email" className="input" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="teacher@example.com" required maxLength={254} value={email} onChange={event => { setEmail(event.target.value); setMessage(""); setNow(Date.now()); }} disabled={busy} />
             </label>
             <button className={`button ${googleAuthEnabled ? "secondary" : "primary"} ${styles.fullWidth}`} type="submit" disabled={busy || secondsLeft > 0}>
-              {busy ? "보내는 중…" : secondsLeft > 0 ? `${secondsLeft}초 후 다시 받기` : "로그인 링크 받기"}<ArrowRight size={16} aria-hidden="true" />
+              {busy ? "처리 중…" : secondsLeft > 0 ? `${secondsLeft}초 후 다시 받기` : "로그인 링크 받기"}<ArrowRight size={16} aria-hidden="true" />
             </button>
             <p className={styles.hint}>메일을 열어 링크 한 번만 누르면 됩니다. 학생 정보는 가입할 때 입력하지 않아요.</p>
-          </form>
+            </form>
+          </div>
         )}
         {message && <p className={styles.notice} role="alert">{message}</p>}
         <div className={styles.footer}>

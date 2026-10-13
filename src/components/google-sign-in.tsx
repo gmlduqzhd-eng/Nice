@@ -13,12 +13,21 @@ export default function GoogleSignIn({ disabled, onCredential }: Props) {
   const buttonHost = useRef<HTMLDivElement>(null);
   const latest = useRef({ disabled, onCredential });
   const pending = useRef(false);
+  const retryButton = useRef<HTMLButtonElement>(null);
+  const recoverFocus = useRef(false);
   const [attempt, setAttempt] = useState(0);
+  const [readyAttempt, setReadyAttempt] = useState(-1);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [submitting, setSubmitting] = useState(false);
   const [credentialError, setCredentialError] = useState("");
 
   useEffect(() => { latest.current = { disabled, onCredential }; }, [disabled, onCredential]);
+  useEffect(() => {
+    if (state === 'loading' || readyAttempt !== attempt || disabled || submitting || !recoverFocus.current) return;
+    const button = retryButton.current;
+    button?.focus();
+    if (document.activeElement === button) recoverFocus.current = false;
+  }, [state, readyAttempt, attempt, disabled, submitting]);
 
   useEffect(() => {
     let active = true;
@@ -47,10 +56,11 @@ export default function GoogleSignIn({ disabled, onCredential }: Props) {
           setCredentialError("");
           // The raw nonce is used only for Supabase verification; Google receives its hash.
           void latest.current.onCredential(response.credential, nonce.raw).then(success => {
-            if (active && !success) setAttempt(value => value + 1);
+            if (active && !success) { recoverFocus.current = true; setAttempt(value => value + 1); }
           }).catch(() => {
             if (active) {
               setCredentialError("Google 로그인을 완료하지 못했습니다. 다시 시도하거나 체험을 계속해 주세요.");
+              recoverFocus.current = true;
               setAttempt(value => value + 1);
             }
           }).finally(() => {
@@ -70,9 +80,10 @@ export default function GoogleSignIn({ disabled, onCredential }: Props) {
         locale: "ko",
         width: String(Math.min(400, Math.max(200, Math.floor(host.getBoundingClientRect().width)))),
       });
+      setReadyAttempt(attempt);
       setState("ready");
     }).catch(() => {
-      if (active) setState("error");
+      if (active) { setReadyAttempt(attempt); setState("error"); }
     });
     return () => {
       active = false;
@@ -84,11 +95,9 @@ export default function GoogleSignIn({ disabled, onCredential }: Props) {
     <div className={styles.googleSignIn} data-testid="google-signin" data-state={state} aria-busy={state === "loading" || submitting}>
       {state === "loading" && <p className={styles.hint} role="status">Google 로그인 준비 중…</p>}
       <div ref={buttonHost} data-testid="google-signin-button" className={styles.googleButton} inert={disabled || submitting || state !== "ready"} />
-      {state === "ready" && <p className={styles.hint}>로그인 창이 열리지 않으면 Chrome이나 Safari에서 이 사이트를 열어 주세요.</p>}
-      {state === "error" && <>
-        <p className={styles.notice} role="alert">Google 로그인 화면을 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.</p>
-        <button type="button" className={`button secondary ${styles.fullWidth}`} disabled={disabled} onClick={() => setAttempt(value => value + 1)}>Google 로그인 다시 준비하기</button>
-      </>}
+      {state === "ready" && <p className={styles.hint}>계정 창이 열리지 않거나 닫혔다면 아래에서 로그인 버튼을 다시 준비할 수 있어요.</p>}
+      {state === "error" && <p className={styles.notice} role="alert">Google 로그인 화면을 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.</p>}
+      <button ref={retryButton} type="button" className={styles.textButton} disabled={disabled || submitting || state === "loading"} onClick={() => setAttempt(value => value + 1)}>Google 로그인 다시 준비하기</button>
       {submitting && <p className={styles.hint} role="status">Google 로그인 확인 중…</p>}
       {credentialError && <p className={styles.notice} role="alert">{credentialError}</p>}
     </div>

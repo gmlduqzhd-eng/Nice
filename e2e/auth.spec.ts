@@ -1,5 +1,5 @@
 import { mockSupabase, TEST_EMAIL, TEST_USER_ID, GOOGLE_TEST_CREDENTIAL } from './helpers/supabase';
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { createHash } from "node:crypto";
 import type { WorkspaceData } from "../src/lib/domain";
 import { createDemoWorkspace } from "../src/lib/demo";
@@ -10,6 +10,12 @@ const AUTH_DIALOG_NAME = /^(?:이메일로 시작하기|간편하게 시작하�
 async function openAuth(page: Page) {
   await page.getByRole("button", { name: "회원가입 · 로그인", exact: true }).click();
   return expectAuthDialog(page);
+}
+async function openEmail(dialog: Locator) {
+  const input = dialog.getByRole('textbox', { name: '이메일 주소', exact: true });
+  if (!await input.isVisible()) await dialog.getByRole('button', { name: '테스트 계정 이메일로 로그인', exact: true }).click();
+  await expect(input).toBeVisible();
+  return input;
 }
 
 test("체험 공간과 두 계정의 명부는 섞이지 않고 재로그인하면 각자 복원된다", async ({ page, baseURL }) => {
@@ -65,7 +71,7 @@ test("이메일 링크로 새 계정과 기존 계정을 같은 화면에서 시
   const mock = await mockSupabase(page, baseURL!);
   await page.goto("/");
   const dialog = await openAuth(page);
-  const email = dialog.getByRole("textbox", { name: "이메일 주소", exact: true });
+  const email = await openEmail(dialog);
   await email.fill("invalid-email");
   await dialog.getByRole("button", { name: "로그인 링크 받기", exact: true }).click();
   expect(mock.state.requests.filter(request => request.path === "/auth/v1/otp")).toHaveLength(0);
@@ -92,7 +98,7 @@ test("메일 발송 제한을 이해할 수 있는 안내로 표시하고 이메
   mock.state.otpError = { status: 429, code: "over_email_send_rate_limit", message: "Email rate limit exceeded" };
   await page.goto("/");
   const dialog = await openAuth(page);
-  await dialog.getByRole("textbox", { name: "이메일 주소", exact: true }).fill(TEST_EMAIL);
+  await (await openEmail(dialog)).fill(TEST_EMAIL);
   await dialog.getByRole("button", { name: "로그인 링크 받기", exact: true }).click();
   await expect(dialog.getByRole("alert")).toContainText(/잠시|요청|다시/);
   await expect(dialog.getByRole("alert")).not.toContainText("Email rate limit exceeded");
@@ -334,6 +340,7 @@ test("만료된 이메일 링크는 재요청 안내를 보여주고 주소에�
   const dialog = await expectAuthDialog(page);
   await expect(dialog).toContainText(/만료|유효하지/);
   await expect.poll(() => new URL(page.url()).hash).toBe("");
+  await openEmail(dialog);
   await expect(dialog.getByRole("button", { name: "로그인 링크 받기", exact: true })).toBeEnabled();
   expect(mock.cloudRequests()).toHaveLength(0);
   expect(mock.state.unexpected).toEqual([]);
@@ -350,7 +357,7 @@ test("콜백 토큰 검증에 실패하면 URL 토큰을 지우고 새 로그인
   expect(mock.state.requests.filter(request => request.path === "/auth/v1/user")).toHaveLength(1);
   expect(mock.cloudRequests()).toHaveLength(0);
   await expect(page.getByRole("button", { name: "내 계정", exact: true, includeHidden: true })).toHaveCount(0);
-  await dialog.getByRole("textbox", { name: "이메일 주소", exact: true }).fill(TEST_EMAIL);
+  await (await openEmail(dialog)).fill(TEST_EMAIL);
   await dialog.getByRole("button", { name: "로그인 링크 받기", exact: true }).click();
   await expect(dialog.getByRole("heading", { name: "메일함을 확인해 주세요", exact: true })).toBeVisible();
   expect(mock.state.requests.filter(request => request.path === "/auth/v1/otp")).toHaveLength(1);
@@ -377,7 +384,7 @@ test("Google 버튼은 해시 nonce를 전달하고 중복 콜백에서도 원�
   const hashedNonce = await google.getAttribute("data-google-nonce");
   expect(hashedNonce).toMatch(/^[a-f0-9]{64}$/);
   expect(await google.getAttribute("data-google-client-id")).toMatch(/\.apps\.googleusercontent\.com$/);
-  await expect(dialog.getByRole("textbox", { name: "이메일 주소", exact: true })).toHaveValue("");
+  await expect(await openEmail(dialog)).toHaveValue("");
   await google.click();
   await expect(page.getByRole("button", { name: "내 계정", exact: true })).toBeVisible();
   const tokens = mock.state.requests.filter(request => request.path === "/auth/v1/token");
@@ -412,6 +419,7 @@ test("Google 인증 실패 안내 후 버튼을 다시 눌러 정상 로그인�
   mock.state.idTokenError = null;
   await expect.poll(() => google.getAttribute("data-google-nonce")).not.toBe(firstNonce);
   await expect(dialog.getByTestId("google-signin")).toHaveAttribute("data-state", "ready");
+  await expect(dialog.getByRole('button', { name: 'Google 로그인 다시 준비하기', exact: true })).toBeFocused();
   const nextNonce = await google.getAttribute("data-google-nonce");
   expect(nextNonce).toMatch(/^[a-f0-9]{64}$/);
   await google.click();
@@ -430,17 +438,76 @@ test("Google SDK가 차단되면 이메일 입력을 유지하고 다시 준비�
   const dialog = await openAuth(page);
   test.skip(!await dialog.getByRole("heading", { name: "간편하게 시작하기", exact: true }).isVisible(), "Google 로그인 비활성 환경");
   await expect(dialog.getByRole("alert")).toContainText("Google 로그인 화면을 불러오지 못했습니다.");
-  await expect(dialog.getByRole("textbox", { name: "이메일 주소", exact: true })).toBeEnabled();
+  const email = await openEmail(dialog);
+  await expect(email).toBeEnabled();
+  await email.fill(TEST_EMAIL);
   await expect(dialog.getByRole("button", { name: "로그인 링크 받기", exact: true })).toBeEnabled();
   expect(mock.state.requests.filter(request => request.path === "/auth/v1/token")).toHaveLength(0);
   mock.state.googleScriptBlocked = false;
   await dialog.getByRole("button", { name: "Google 로그인 다시 준비하기", exact: true }).click();
   const google = dialog.getByRole("button", { name: "Google로 계속하기", exact: true });
   await expect(google).toBeVisible();
+  await expect(email).toHaveValue(TEST_EMAIL);
   expect(mock.state.googleScriptRequests).toBe(2);
   await google.click();
   await expect(page.getByRole("button", { name: "내 계정", exact: true })).toBeVisible();
   expect(mock.state.requests.filter(request => request.path === "/auth/v1/token")).toHaveLength(1);
   expect(mock.cloudRequests()).toHaveLength(0);
   expect(mock.state.unexpected).toEqual([]);
+});
+
+test('Google 경로를 먼저 보여주고 테스트 이메일을 열거나 접어도 입력은 유지된다', async ({ page, baseURL }) => {
+  const mock = await mockSupabase(page, baseURL!);
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto('/');
+  const dialog = await openAuth(page);
+  test.skip(!await dialog.getByRole('heading', { name: '간편하게 시작하기', exact: true }).isVisible(), 'Google 로그인 비활성 환경');
+  const toggle = dialog.getByRole('button', { name: '테스트 계정 이메일로 로그인', exact: true });
+  const email = dialog.getByRole('textbox', { name: '이메일 주소', exact: true });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(email).toBeHidden();
+  await toggle.press('Enter');
+  await expect(email).toBeFocused();
+  await email.fill(TEST_EMAIL);
+  await toggle.click();
+  await expect(email).toBeHidden();
+  await toggle.press('Enter');
+  await expect(email).toBeFocused();
+  await expect(email).toHaveValue(TEST_EMAIL);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole('button', { name: '회원가입 · 로그인', exact: true })).toBeFocused();
+  expect(mock.state.requests.filter(request => request.path === '/auth/v1/otp')).toHaveLength(0);
+});
+
+test('계정 창이 열리지 않아도 준비된 Google 버튼을 새 nonce로 다시 준비할 수 있다', async ({ page, baseURL }) => {
+  const mock = await mockSupabase(page, baseURL!);
+  await page.goto('/');
+  const dialog = await openAuth(page);
+  test.skip(!await dialog.getByRole('heading', { name: '간편하게 시작하기', exact: true }).isVisible(), 'Google 로그인 비활성 환경');
+  const google = dialog.getByRole('button', { name: 'Google로 계속하기', exact: true });
+  await expect(google).toBeVisible();
+  const firstNonce = await google.getAttribute('data-google-nonce');
+  await (await openEmail(dialog)).fill(TEST_EMAIL);
+  const retry = dialog.getByRole('button', { name: 'Google 로그인 다시 준비하기', exact: true });
+  await retry.press('Enter');
+  await expect.poll(() => google.getAttribute('data-google-nonce')).not.toBe(firstNonce);
+  await expect(retry).toBeEnabled();
+  await expect(dialog.getByRole('textbox', { name: '이메일 주소', exact: true })).toHaveValue(TEST_EMAIL);
+  expect(mock.state.requests.filter(request => ['/auth/v1/token', '/auth/v1/otp'].includes(request.path))).toHaveLength(0);
+});
+
+test('사용 안내를 키보드로 접고 다시 열면 초점을 유지하고 새로고침에도 선택을 기억한다', async ({ page, baseURL }) => {
+  await mockSupabase(page, baseURL!);
+  await page.goto('/');
+  const heading = page.getByRole('heading', { name: '하루 한 줄부터 시작해 보세요.', exact: true });
+  await expect(heading).toBeVisible();
+  await page.getByRole('button', { name: '사용 안내 접기', exact: true }).press('Enter');
+  const toggle = page.getByRole('button', { name: '사용 안내 다시 보기', exact: true });
+  await expect(toggle).toBeFocused();
+  await toggle.press('Enter');
+  await expect(heading).toBeFocused();
+  await page.reload();
+  await expect(heading).toBeVisible();
 });

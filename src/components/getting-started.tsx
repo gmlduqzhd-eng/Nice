@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, HelpCircle, NotebookPen, ClipboardCheck, Cloud, X } from 'lucide-react';
 
 const GUIDE_KEY = 'damim-note.guide.dismissed.v1';
@@ -12,17 +12,30 @@ export default function GettingStarted({ onRecord, onPrepare, onBackup, onClassr
   onClassroom: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef<'heading' | 'toggle' | null>(null);
   useEffect(() => {
     try { setExpanded(localStorage.getItem(GUIDE_KEY) !== 'true'); }
     catch { setExpanded(true); }
   }, []);
+  useEffect(() => {
+    if (!returnFocus.current) return;
+    (returnFocus.current === 'heading' ? heading.current : toggle.current)?.focus();
+    returnFocus.current = null;
+  }, [expanded]);
   const close = () => {
+    returnFocus.current = 'toggle';
     setExpanded(false);
     try { localStorage.setItem(GUIDE_KEY, 'true'); } catch { /* Optional preference only. */ }
   };
-  if (!expanded) return <div className="guide-toggle"><button type="button" className="text-button" onClick={() => setExpanded(true)}><HelpCircle size={16} aria-hidden="true"/>사용 안내 다시 보기</button></div>;
+  const open = () => {
+    returnFocus.current = 'heading'; setExpanded(true);
+    try { localStorage.setItem(GUIDE_KEY, 'false'); } catch { /* Optional preference only. */ }
+  };
+  if (!expanded) return <div className="guide-toggle"><button ref={toggle} type="button" className="text-button" onClick={open}><HelpCircle size={16} aria-hidden="true"/>사용 안내 다시 보기</button></div>;
   return <section className="quick-guide" aria-labelledby="quick-guide-title">
-    <div className="quick-guide-heading"><div><span className="eyebrow">처음이라면 이렇게</span><h2 id="quick-guide-title">하루 한 줄부터 시작해 보세요.</h2><p>가입 전에도 바로 연습할 수 있어요. 기록 → 문장 준비 → 보관, 세 가지만 기억하세요.</p></div><button type="button" className="icon-button" aria-label="사용 안내 접기" onClick={close}><X size={20}/></button></div>
+    <div className="quick-guide-heading"><div><span className="eyebrow">처음이라면 이렇게</span><h2 id="quick-guide-title" ref={heading} tabIndex={-1}>하루 한 줄부터 시작해 보세요.</h2><p>가입 전에도 바로 연습할 수 있어요. 기록 → 문장 준비 → 보관, 세 가지만 기억하세요.</p></div><button type="button" className="icon-button" aria-label="사용 안내 접기" onClick={close}><X size={20} aria-hidden="true"/></button></div>
     <p className="guide-classroom">새 학급을 준비하시나요? <button type="button" className="text-button" onClick={onClassroom}>빈 학급으로 시작하기</button></p>
     <div className="quick-guide-actions">
       <button type="button" onClick={onRecord}><span className="quick-guide-icon"><NotebookPen size={21}/></span><span><strong>첫 관찰 남기기</strong><small>학생을 고르고, 직접 본 순간을 한 줄로</small></span><ArrowRight size={17}/></button>
