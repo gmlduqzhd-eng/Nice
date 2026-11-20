@@ -83,6 +83,53 @@
 .writing-routes > span { color: #596b84; font-size: 13px; }
 .writing-routes > strong { font-size: 14px; }
 .editor-actions { flex-wrap: wrap; }
+.dashboard-heading { display: block; margin-bottom: 16px; }
+.dashboard-heading h1 { margin-bottom: 0; }
+.dashboard-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  margin-bottom: 12px;
+}
+.dashboard-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 18px 22px;
+  min-width: 0;
+}
+.dashboard-action + .dashboard-action { border-inline-start: 1px solid var(--line); }
+.dashboard-action h2 { font-size: 16px; margin: 0; }
+.dashboard-action p { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.dashboard-action p span { display: block; color: #596b84; }
+.dashboard-action .button { margin-top: auto; min-height: 44px; }
+.review-editor { min-width: 0; }
+.review-editor-layout { display: grid; grid-template-columns: minmax(0, 1fr); }
+.review-evidence-column { min-width: 0; border-block: 1px solid var(--line); }
+.review-evidence-column .editor-tabs { flex-wrap: wrap; }
+.review-evidence-column .evidence-item { min-width: 0; }
+.review-evidence-column .evidence-text { overflow-wrap: anywhere; }
+.review-controls .editor-actions { margin-top: 16px; }
+.review-editor [tabindex="-1"], .review-editor textarea, .review-editor button {
+  scroll-margin-top: 88px;
+}
+.review-editor [tabindex="-1"]:focus { outline: 2px solid #4165ca; outline-offset: 2px; }
+@media (min-width: 1250px) {
+  .review-editor-layout {
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+    grid-template-areas: "writing evidence" "controls evidence";
+  }
+  .review-writing { grid-area: writing; }
+  .review-controls { grid-area: controls; padding-top: 0; }
+  .review-evidence-column { grid-area: evidence; border-block: 0; border-inline-start: 1px solid var(--line); }
+  .review-evidence-column .editor-tabs, .review-evidence-column .evidence-panel { padding-inline: 16px; }
+}
+@media (max-width: 520px) {
+  .dashboard-actions { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-action { padding: 14px 16px; }
+  .dashboard-action + .dashboard-action { border-inline-start: 0; border-top: 1px solid var(--line); }
+  .review-editor .editor-actions .primary { width: 100%; }
+}
 @media(max-width:520px) { .storage-location { margin-top: 0; font-size: 11px; }.writing-routes { padding: 14px; }.writing-routes .button { width: 100%; } }
 
 /* Keyboard visibility and comfortable touch targets for teacher workflows. */

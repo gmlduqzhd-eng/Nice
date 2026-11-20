@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen, LayoutDashboard, NotebookPen, ClipboardCheck, School, Settings, Plus, Search, ChevronRight, ArrowUpRight, Check, CircleCheck, AlertCircle, FileText, Copy, X, CalendarDays, Download, Pencil, Trash2, Menu, ShieldCheck } from 'lucide-react';
-import { addObservation, deleteObservation, editObservation, getIssues, transitionDraft, updateDraft, utf8ByteLength, type Draft, type Observation, type WorkspaceData } from '@/lib/domain';
+import { addObservation, deleteObservation, editObservation, getIssues, transitionDraft, updateDraft, utf8ByteLength, type Draft, type Issue, type Observation, type Student, type WorkspaceData } from '@/lib/domain';
 import { createDemoWorkspace } from '@/lib/demo';
 import SettingsPanel from './settings-panel';
 import SchoolPanel from './school-panel';
@@ -17,6 +17,7 @@ import { OBSERVATION_CATEGORIES } from '@/lib/subjects';
 
 type View = 'dashboard' | 'observations' | 'workbench' | 'school' | 'settings' | 'classroom' | 'neis-job';
 type SetWorkspace = (update: WorkspaceData | ((current: WorkspaceData) => WorkspaceData)) => void;
+type ReviewJump = { target: string; check?: boolean };
 const NAV = [
   { id: 'dashboard', label: '업무 한눈에', icon: LayoutDashboard },
   { id: 'observations', label: '관찰 노트', icon: NotebookPen },
@@ -26,6 +27,33 @@ const NAV = [
   { id: 'classroom', label: '학급 · 명부', icon: BookOpen },
 ] as const;
 const STATUS: Record<Draft['status'], string> = { draft: '작성 중', reviewed: '검토 완료', copied: '복사됨', confirmed: '반영 확인' };
+
+function issueDestination(issue: Issue): ReviewJump {
+  switch (issue.kind) {
+    case 'no-observations': return { target: 'add-review-observation' };
+    case 'empty-draft': return { target: 'draft-content' };
+    case 'no-evidence': return { target: 'review-evidence' };
+    case 'missing-evidence':
+    case 'wrong-student-evidence': return { target: 'clear-invalid-evidence' };
+    default: return { target: `review-issue-${issue.id}`, check: true };
+  }
+}
+
+function reviewTask(issues: Issue[]): { label: string; destination: ReviewJump } {
+  const next = (['missing-evidence', 'wrong-student-evidence', 'no-observations', 'empty-draft', 'no-evidence', 'other-student-name', 'duplicate-content'] as const)
+    .map(kind => issues.find(issue => issue.kind === kind)).find(Boolean);
+  if (!next) return { label: '문장 검토', destination: { target: 'review-next-action' } };
+  const label = {
+    'missing-evidence': '관찰 근거 다시 연결',
+    'wrong-student-evidence': '관찰 근거 다시 연결',
+    'no-observations': '관찰 기록 추가',
+    'empty-draft': '문장 작성',
+    'no-evidence': '관찰 근거 선택',
+    'other-student-name': '학생 이름 확인',
+    'duplicate-content': '중복 문장 확인',
+  }[next.kind];
+  return { label, destination: issueDestination(next) };
+}
 function localToday() { const now = new Date(); return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-'); }
 
 function Avatar({ number, size = '' }: { number: number; size?: string }) {
@@ -49,6 +77,7 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
   const [data, setDataState] = useState<WorkspaceData>(createDemoWorkspace);
   const dataRef = useRef(data);
   const storageKey = workspaceStorageKey(userId);
+  const resumeKey = `${storageKey}.review-student.v1`;
   const expectedRaw = useRef<string | null>(null);
   const writable = useRef(false);
   // Keep a synchronous current snapshot so asynchronous clipboard completions
@@ -74,6 +103,8 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'warning' | 'info'>('all');
   const [selected, setSelected] = useState('');
+  const [resumeId, setResumeId] = useState('');
+  const [reviewJump, setReviewJump] = useState<ReviewJump | null>(null);
   const [toast, setToast] = useState('');
   const [storageError, setStorageError] = useState('');
   const [storageBlocked, setStorageBlocked] = useState(false);
@@ -104,6 +135,13 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
       setStorageBlocked(true);
       setStorageError('이 브라우저에서 저장된 자료에 접근하지 못해 자동 저장을 멈췄습니다. 설정에서 작업 내용을 JSON으로 백업해 주세요.');
     }
+    try {
+      const lastStudent = localStorage.getItem(resumeKey);
+      if (lastStudent && dataRef.current.students.some(student => student.id === lastStudent)) {
+        setResumeId(lastStudent);
+        setSelected(lastStudent);
+      }
+    } catch { /* Reading this preference is optional. */ }
     setReady(true);
     const changedElsewhere = (event: StorageEvent) => {
       if (event.storageArea !== localStorage || (event.key !== storageKey && event.key !== null)) return;
@@ -113,7 +151,7 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
     };
     window.addEventListener('storage', changedElsewhere);
     return () => { writable.current = false; window.removeEventListener('storage', changedElsewhere); if (toastTimer.current) clearTimeout(toastTimer.current); };
-  }, [storageKey, userId]);
+  }, [storageKey, resumeKey, userId]);
   const downloadRecovery = () => {
     if (recoveryRaw === null) return;
     const url = URL.createObjectURL(new Blob([recoveryRaw], { type: 'text/plain;charset=utf-8' }));
@@ -126,24 +164,54 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const issues = useMemo(() => getIssues(data), [data]);
+  const pendingStudents = useMemo(() => data.students
+    .filter(student => (data.drafts.find(draft => draft.studentId === student.id)?.status ?? 'draft') === 'draft')
+    .sort((a, b) => a.number - b.number), [data]);
+  const resumeStudent = pendingStudents.find(student => student.id === resumeId) ?? pendingStudents[0];
+  const resumeTask = resumeStudent && reviewTask(issues.filter(issue => issue.studentId === resumeStudent.id));
   const confirmed = data.students.filter(student => data.drafts.find(draft => draft.studentId === student.id)?.status === 'confirmed').length;
   const reviewed = data.students.filter(student => { const draft = data.drafts.find(item => item.studentId === student.id); return draft && draft.status !== 'draft'; }).length;
   const noObservation = data.students.filter(s => !data.observations.some(o => o.studentId === s.id));
   const selectedStudent = data.students.find(s => s.id === selected) ?? data.students[0];
+  const nextReviewStudent = selectedStudent && (
+    pendingStudents.find(student => student.number > selectedStudent.number) ??
+    pendingStudents.find(student => student.id !== selectedStudent.id)
+  );
   const searchTerm = query.normalize('NFC').trim().toLocaleLowerCase('ko-KR');
   const matchesSearch = (text: string) => text.normalize('NFC').toLocaleLowerCase('ko-KR').includes(searchTerm);
   const shownIssues = issues.filter(i => (filter === 'all' || i.severity === filter) && matchesSearch(`${data.students.find(s => s.id === i.studentId)?.name ?? ''} ${i.title} ${i.detail}`));
   const shownObservations = [...data.observations].sort((a, b) => b.date.localeCompare(a.date)).filter(o => matchesSearch(`${data.students.find(s => s.id === o.studentId)?.name ?? ''} ${o.category} ${o.content}`));
   const navigate = (target: View) => {
-    if (target !== view && view === 'classroom' && classroomPending && !window.confirm('학급·명부에서 저장하지 않은 입력이 있습니다. 저장하지 않고 다른 메뉴로 이동할까요?')) return;
+    if (target !== view && view === 'classroom' && classroomPending && !window.confirm('학급·명부에서 저장하지 않은 입력이 있습니다. 저장하지 않고 다른 메뉴로 이동할까요?')) return false;
     if (target !== view) setClassroomPending(false);
+    setReviewJump(null);
     setView(target); setMobileMenu(false); setQuery(''); setAllIssues(false);
+    return true;
   };
   const beginAuth = () => {
     if (classroomPending && !window.confirm('학급·명부에 저장하지 않은 입력이 있습니다. 로그인 후에는 이 입력이 사라질 수 있습니다. 계속할까요?')) return;
     openAuth();
   };
-  const openStudent = (id: string) => { setSelected(id); navigate('workbench'); };
+  const rememberReviewStudent = (id: string) => {
+    setResumeId(id);
+    try {
+      if (id) localStorage.setItem(resumeKey, id);
+      else localStorage.removeItem(resumeKey);
+    } catch { /* The review still works if this preference cannot be saved. */ }
+  };
+  const selectReviewStudent = (id: string, destination: ReviewJump | null = null) => {
+    setSelected(id);
+    setReviewJump(destination && { ...destination });
+    rememberReviewStudent(id);
+  };
+  const openStudent = (id: string, destination: ReviewJump | null = null) => {
+    if (navigate('workbench')) selectReviewStudent(id, destination);
+  };
+  const resumeReview = () => {
+    if (resumeStudent && resumeTask) openStudent(resumeStudent.id, resumeTask.destination);
+    else if (data.students.length) openTransfer('behavior');
+    else navigate('classroom');
+  };
   const openTransfer = (task: 'behavior' | 'semester', studentId?: string) => {
     setNeisTask(task); setNeisStudentId(studentId); navigate('neis-job');
   };
@@ -151,7 +219,11 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
     if (!dataRef.current.students.length) { navigate('classroom'); notify('학급·명부에서 학생을 먼저 추가해 주세요.'); return; }
     setModal('new');
   };
-  const replaceData = (next: WorkspaceData) => { setData(next); setSelected(next.students[0]?.id ?? ''); };
+  const replaceData = (next: WorkspaceData) => {
+    setData(next);
+    setSelected(next.students[0]?.id ?? '');
+    rememberReviewStudent('');
+  };
   const isCurrentWorkspace = (snapshot: WorkspaceData) => writable.current && dataRef.current === snapshot && localStorage.getItem(storageKey) === expectedRaw.current;
 
   useEffect(() => {
@@ -174,9 +246,10 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
   useEffect(() => {
     if (previousView.current === view) return;
     previousView.current = view;
+    if (view === 'workbench' && reviewJump) return;
     window.scrollTo({ top: 0, behavior: 'instant' });
     mainRef.current?.focus({ preventScroll: true });
-  }, [view]);
+  }, [view, reviewJump]);
 
   if (!ready) return <main id="main-content" className="workspace-loading" role="status">저장된 기록을 불러오고 있습니다…</main>;
 
@@ -206,8 +279,24 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
         {storageError && <div role="alert" className="notice error notice-block"><span>{storageError}</span><button className="text-button" onClick={() => navigate("settings")}>현재 자료 백업하기</button><button className="text-button" onClick={() => window.location.reload()}>최신 기록 불러오기</button>{recoveryRaw !== null && <button className="text-button" onClick={downloadRecovery}><Download size={16}/>복구 사본 다운로드</button>}</div>}
         <fieldset className="workspace-content" disabled={storageBlocked && view !== 'settings'}>
         {view === 'dashboard' && <>
-          <div className="page-heading"><div><div className="eyebrow">{data.classroom.year}학년도 {data.classroom.semester}학기 · {data.classroom.grade}학년 {data.classroom.room}반</div><h1>선생님, 오늘도 반갑습니다 <span className="greeting-dot"/></h1><p>기록은 차곡차곡, 마무리는 빠짐없이. 우리 반 업무를 확인해 보세요.</p></div><button className="button primary" onClick={() => startObservation()}><Plus size={18}/>관찰 기록 추가</button></div>
-          <GettingStarted onRecord={() => startObservation()} onPrepare={() => navigate('workbench')} onBackup={() => navigate('settings')} onClassroom={() => navigate('classroom')} />
+          <div className="page-heading dashboard-heading">
+            <div className="eyebrow">{data.classroom.year}학년도 {data.classroom.semester}학기 · {data.classroom.grade}학년 {data.classroom.room}반</div>
+            <h1>선생님, 오늘도 반갑습니다</h1>
+          </div>
+          <section className="dashboard-actions card" aria-label="바로 시작하기">
+            <div className="dashboard-action">
+              <h2>관찰 한 줄 남기기</h2>
+              <button className="button primary" onClick={startObservation}><Plus size={18}/>관찰 기록 추가</button>
+            </div>
+            <div className="dashboard-action">
+              <h2>{resumeStudent ? '이어서 할 일' : data.students.length ? '문장 검토 완료' : '학급 준비'}</h2>
+              {resumeStudent && resumeTask ? <>
+                <p id="resume-review-detail"><span>행동특성 및 종합의견</span><strong>{resumeStudent.number}번 {resumeStudent.name} · {resumeTask.label}</strong></p>
+                <button className="button secondary" aria-describedby="resume-review-detail" onClick={resumeReview}>이어서 검토 <ChevronRight size={17}/></button>
+              </> : <button className="button secondary" onClick={resumeReview}>{data.students.length ? '옮길 문장 확인' : '학생 명부 준비'} <ChevronRight size={17}/></button>}
+            </div>
+          </section>
+          <GettingStarted onRecord={startObservation} onPrepare={resumeReview} onBackup={() => navigate('settings')} onClassroom={() => navigate('classroom')} />
           <div className="stats-grid">
             <button className="stat-card" onClick={() => { setFilter('all'); setQuery(''); setAllIssues(false); document.getElementById('issues')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}><span className="stat-top">확인이 필요한 항목 <span className="stat-icon orange"><AlertCircle size={18}/></span></span><span className="stat-value">{issues.length}<small>건</small></span><span className="stat-caption"><span className="orange-text">누락 · 검토 필요</span> 항목을 확인해 주세요</span></button>
             <button className="stat-card" onClick={() => navigate('observations')}><span className="stat-top">쌓인 관찰 기록 <span className="stat-icon blue"><NotebookPen size={18}/></span></span><span className="stat-value">{data.observations.length}<small>개</small></span><span className="stat-caption">우리 반 {data.students.length}명의 배움과 성장</span></button>
@@ -215,10 +304,10 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
             <button className="stat-card" onClick={() => navigate('workbench')}><span className="stat-top">나이스 반영 확인 <span className="stat-icon green"><CircleCheck size={18}/></span></span><span className="stat-value">{confirmed}<small>/ {data.students.length}명</small></span><span className="stat-caption">선생님이 직접 확인한 항목 기준</span></button>
           </div>
           <div className="dashboard-grid"><div className="primary-column">
-            <section className="card issue-card" id="issues"><div className="card-heading"><div><h2><span className="heading-dot"/> 먼저 확인해 주세요 <span className="count-label">{issues.length}</span></h2><p>앱에 기록한 자료에서 찾은 점검 항목입니다.</p></div><span className="small-tag">자동 점검</span></div><div className="issue-toolbar"><div className="segmented" role="group" aria-label="점검 필터">{([['all','전체'],['warning','우선 확인'],['info','참고']] as const).map(([id,label]) => <button key={id} aria-pressed={filter === id} className={filter === id ? 'selected' : ''} onClick={() => setFilter(id)}>{label}</button>)}</div><label className="search-box compact"><Search size={16}/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="학생 또는 항목 검색" aria-label="점검 항목 검색"/></label></div><div className="issue-list">{shownIssues.slice(0, allIssues ? undefined : 5).map(issue => { const s = data.students.find(s => s.id === issue.studentId)!; return <button key={issue.id} className="issue-row" onClick={() => openStudent(s.id)}><span className={`issue-symbol ${issue.severity}`}><AlertCircle size={19}/></span><div className="issue-content"><div><strong>{issue.title}</strong><span className={`issue-label ${issue.severity}`}>{issue.severity === 'warning' ? '확인 필요' : '참고'}</span></div><p>{s.number}번 {s.name} <span>·</span> {issue.detail}</p></div><ChevronRight size={17}/></button>; })}{shownIssues.length === 0 && <div className="empty-state"><CircleCheck size={30}/><strong>표시할 점검 항목이 없습니다.</strong><p>다른 필터나 검색어로 확인해 보세요.</p></div>}</div><div className="card-footer">{!allIssues && shownIssues.length > 5 ? `검색 결과 ${shownIssues.length}건 중 5건 표시` : `${shownIssues.length}건의 점검 항목`}<span className="row issue-footer-actions">{shownIssues.length > 5 && <button type="button" className="text-button" aria-expanded={allIssues} onClick={() => setAllIssues(value => !value)}>{allIssues ? '5건만 보기' : '점검 항목 전체보기'}</button>}<button className="text-button" onClick={() => navigate('workbench')}>입력 준비에서 전체 점검 <ArrowUpRight size={15}/></button></span></div></section>
-            <section className="card"><div className="card-heading"><div><h2>우리 반 기록 현황</h2><p>학생별 관찰과 문장 준비 상태를 함께 확인하세요.</p></div><button className="text-button" onClick={() => navigate('workbench')}>전체 보기 <ChevronRight size={15}/></button></div><div className="table-scroll"><table><thead><tr><th>학생</th><th>관찰 기록</th><th>문장 상태</th><th className="table-last">점검</th></tr></thead><tbody>{data.students.slice(0,5).map(s => { const d = data.drafts.find(d => d.studentId === s.id); const count = issues.filter(i => i.studentId === s.id).length; return <tr key={s.id}><td><button className="student-name" onClick={() => openStudent(s.id)}><Avatar number={s.number}/><strong>{s.name}</strong><span>{s.number}번</span></button></td><td>{data.observations.filter(o=>o.studentId===s.id).length}<span className="muted">건</span></td><td>{d && <Status value={d.status}/>}</td><td className="table-last"><button className={`table-check ${count ? 'needs-check' : ''}`} onClick={() => openStudent(s.id)}>{count ? `${count}건 확인` : '이상 없음'}<ChevronRight size={14}/></button></td></tr>; })}</tbody></table></div></section>
+            <section className="card issue-card" id="issues"><div className="card-heading"><div><h2><span className="heading-dot"/> 먼저 확인해 주세요 <span className="count-label">{issues.length}</span></h2><p>앱에 기록한 자료에서 찾은 점검 항목입니다.</p></div><span className="small-tag">자동 점검</span></div><div className="issue-toolbar"><div className="segmented" role="group" aria-label="점검 필터">{([['all','전체'],['warning','우선 확인'],['info','참고']] as const).map(([id,label]) => <button key={id} aria-pressed={filter === id} className={filter === id ? 'selected' : ''} onClick={() => setFilter(id)}>{label}</button>)}</div><label className="search-box compact"><Search size={16}/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="학생 또는 항목 검색" aria-label="점검 항목 검색"/></label></div><div className="issue-list">{shownIssues.slice(0, allIssues ? undefined : 5).map(issue => { const s = data.students.find(s => s.id === issue.studentId)!; return <button key={issue.id} className="issue-row" onClick={() => openStudent(s.id, issueDestination(issue))}><span className={`issue-symbol ${issue.severity}`}><AlertCircle size={19}/></span><div className="issue-content"><div><strong>{issue.title}</strong><span className={`issue-label ${issue.severity}`}>{issue.severity === 'warning' ? '확인 필요' : '참고'}</span></div><p>{s.number}번 {s.name} <span>·</span> {issue.detail}</p></div><ChevronRight size={17}/></button>; })}{shownIssues.length === 0 && <div className="empty-state"><CircleCheck size={30}/><strong>표시할 점검 항목이 없습니다.</strong><p>다른 필터나 검색어로 확인해 보세요.</p></div>}</div><div className="card-footer">{!allIssues && shownIssues.length > 5 ? `검색 결과 ${shownIssues.length}건 중 5건 표시` : `${shownIssues.length}건의 점검 항목`}<span className="row issue-footer-actions">{shownIssues.length > 5 && <button type="button" className="text-button" aria-expanded={allIssues} onClick={() => setAllIssues(value => !value)}>{allIssues ? '5건만 보기' : '점검 항목 전체보기'}</button>}<button className="text-button" onClick={() => navigate('workbench')}>입력 준비에서 전체 점검 <ArrowUpRight size={15}/></button></span></div></section>
+            <section className="card"><div className="card-heading"><div><h2>우리 반 기록 현황</h2><p>학생별 관찰과 문장 준비 상태를 함께 확인하세요.</p></div><button className="text-button" onClick={() => navigate('workbench')}>전체 보기 <ChevronRight size={15}/></button></div><div className="table-scroll"><table><thead><tr><th>학생</th><th>관찰 기록</th><th>문장 상태</th><th className="table-last">점검</th></tr></thead><tbody>{data.students.slice(0,5).map(s => { const d = data.drafts.find(d => d.studentId === s.id); const count = issues.filter(i => i.studentId === s.id).length; return <tr key={s.id}><td><button className="student-name" onClick={() => openStudent(s.id)}><Avatar number={s.number}/><strong>{s.name}</strong><span>{s.number}번</span></button></td><td>{data.observations.filter(o=>o.studentId===s.id).length}<span className="muted">건</span></td><td>{d && <Status value={d.status}/>}</td><td className="table-last"><button className={`table-check ${count ? 'needs-check' : ''}`} onClick={() => openStudent(s.id, count ? reviewTask(issues.filter(issue => issue.studentId === s.id)).destination : null)}>{count ? `${count}건 확인` : '이상 없음'}<ChevronRight size={14}/></button></td></tr>; })}</tbody></table></div></section>
           </div><aside className="secondary-column">
-            <section className="progress-card"><div className="row between"><span className="small-tag light">학기 말 준비</span><ClipboardCheck size={20}/></div><h2>조금씩 준비하면<br/>마감이 가벼워집니다.</h2><div className="progress-ring" style={{ '--progress': `${data.students.length ? confirmed/data.students.length*100 : 0}%` } as React.CSSProperties}><span><strong>{data.students.length ? Math.round(confirmed/data.students.length*100) : 0}<small>%</small></strong><span>반영 확인</span></span></div><div className="progress-summary"><span>남은 학생</span><strong>{data.students.length-confirmed}명</strong></div><button onClick={() => navigate('workbench')}>이어서 준비하기 <ChevronRight size={16}/></button></section>
+            <section className="progress-card"><div className="row between"><span className="small-tag light">학기 말 준비</span><ClipboardCheck size={20}/></div><h2>조금씩 준비하면<br/>마감이 가벼워집니다.</h2><div className="progress-ring" style={{ '--progress': `${data.students.length ? confirmed/data.students.length*100 : 0}%` } as React.CSSProperties}><span><strong>{data.students.length ? Math.round(confirmed/data.students.length*100) : 0}<small>%</small></strong><span>반영 확인</span></span></div><div className="progress-summary"><span>남은 학생</span><strong>{data.students.length-confirmed}명</strong></div><button onClick={resumeReview}>이어서 준비하기 <ChevronRight size={16}/></button></section>
             <section className="card compact-card"><div className="card-heading"><h2><NotebookPen size={17}/> 한 번 더 살펴볼 학생</h2></div><p className="muted">아직 관찰 기록이 없는 학생이에요.</p><div className="watch-list">{noObservation.map(s => <button key={s.id} onClick={() => { setSelected(s.id); startObservation(); }}><Avatar number={s.number}/><strong>{s.name}</strong><Plus size={16}/></button>)}{data.students.length === 0 ? <div><p className="muted">학생 명부를 먼저 준비해 주세요.</p><button className="text-button" onClick={() => navigate("classroom")}>학급·명부 열기 <ChevronRight size={14}/></button></div> : noObservation.length === 0 && <p className="success-text">모든 학생에게 관찰 기록이 있습니다.</p>}</div></section>
             <section className="calendar-shortcut"><span className="calendar-icon"><CalendarDays size={23}/></span><div><strong>우리 학교 학사일정</strong><p>나이스 공개정보로 확인하세요.</p></div><button className="icon-button" aria-label="학사일정 열기" onClick={() => navigate('school')}><ArrowUpRight size={20}/></button></section>
           </aside></div>
@@ -230,9 +319,9 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
         {view === 'workbench' && <>
           <div className="page-heading"><div><div className="eyebrow">행동특성 및 종합의견 · 작성부터 검토까지</div><h1>문장 작성·검토</h1><p>근거를 확인하고 문장을 정리한 뒤, 나이스에 직접 옮겨 주세요.</p></div><span className="outlined-label"><ShieldCheck size={16}/>나이스 자동 전송 없음</span></div>
           <div className="writing-routes"><span>어떤 문장을 준비하시나요?</span><strong>행동특성·종합의견 작성 중</strong><button className="button secondary" type="button" onClick={() => openTransfer('semester')}>학기말 종합의견 작성</button></div>
-          <div className="workbench-layout"><aside className="card student-list"><div className="card-heading"><h2>우리 반 학생 <span className="count-label">{data.students.length}</span></h2></div>{data.students.map(s=>{const d=data.drafts.find(d=>d.studentId===s.id);return <button key={s.id} className={`student-list-item ${selectedStudent?.id===s.id?'selected':''}`} onClick={()=>setSelected(s.id)}><Avatar number={s.number}/><span><strong>{s.name}</strong><small>{d?STATUS[d.status]:'작성 전'}</small></span>{issues.some(i=>i.studentId===s.id)?<span className="attention-dot"/>:<Check size={16}/>}</button>;})}</aside>{!selectedStudent && <div className="card empty-state"><BookOpen size={30}/><h2>학생 명부를 먼저 준비해 주세요.</h2><p>학급·명부에서 번호와 이름을 추가하면 문장을 작성할 수 있습니다.</p><button className="button primary" onClick={() => navigate('classroom')}>학급·명부 열기</button></div>}{selectedStudent && <DraftEditor key={selectedStudent.id} isCurrentWorkspace={isCurrentWorkspace} data={data} studentId={selectedStudent.id} setData={setData} notify={notify} onRequestLogin={beginAuth} onTransfer={() => openTransfer('behavior', selectedStudent.id)} onAdd={()=>{setSelected(selectedStudent.id);startObservation();}}/>}</div>
+          <div className="workbench-layout"><aside className="card student-list"><div className="card-heading"><h2>우리 반 학생 <span className="count-label">{data.students.length}</span></h2></div>{data.students.map(s=>{const d=data.drafts.find(d=>d.studentId===s.id);return <button key={s.id} className={`student-list-item ${selectedStudent?.id===s.id?'selected':''}`} aria-current={selectedStudent?.id === s.id ? 'true' : undefined} onClick={() => selectReviewStudent(s.id)}><Avatar number={s.number}/><span><strong>{s.name}</strong><small>{d?STATUS[d.status]:'작성 전'}</small></span>{issues.some(i=>i.studentId===s.id)?<span className="attention-dot"/>:<Check size={16}/>}</button>;})}</aside>{!selectedStudent && <div className="card empty-state"><BookOpen size={30}/><h2>학생 명부를 먼저 준비해 주세요.</h2><p>학급·명부에서 번호와 이름을 추가하면 문장을 작성할 수 있습니다.</p><button className="button primary" onClick={() => navigate('classroom')}>학급·명부 열기</button></div>}{selectedStudent && <DraftEditor key={selectedStudent.id} isCurrentWorkspace={isCurrentWorkspace} data={data} studentId={selectedStudent.id} setData={setData} notify={notify} onRequestLogin={beginAuth} onTransfer={() => openTransfer('behavior', selectedStudent.id)} onAdd={startObservation} jump={reviewJump} nextStudent={nextReviewStudent} onNext={student => selectReviewStudent(student.id, { target: 'review-student-heading' })}/>}</div>
         </>}
-        {view === 'neis-job' && <NeisJobPanel data={data} onChange={update => { setData(update); return true; }} initialTask={neisTask} initialStudentId={neisStudentId} onReview={id => { setSelected(id); navigate('workbench'); }}/>}
+        {view === 'neis-job' && <NeisJobPanel data={data} onChange={update => { setData(update); return true; }} initialTask={neisTask} initialStudentId={neisStudentId} onReview={openStudent}/>}
         {view === 'classroom' && <ClassroomPanel data={data} onChange={setData} onToast={notify} onPendingChange={setClassroomPending}/>}
         {view === 'school' && <><div className="page-heading"><div><div className="eyebrow">나이스 교육정보 개방 포털</div><h1>학교 · 학사일정</h1><p>학교를 검색해 공개된 학사일정을 확인하세요.</p></div></div><SchoolPanel onToast={notify}/></>}
         {view === 'settings' && <><div className="page-heading"><div><div className="eyebrow">나의 업무 공간 관리</div><h1>설정 및 백업</h1><p>내 기록을 파일로 보관하거나, 로그인한 계정에 직접 저장하세요.</p></div></div><SettingsPanel data={data} onReplace={replaceData} onToast={notify} isCurrentWorkspace={isCurrentWorkspace} readOnly={storageBlocked} onViewObservations={() => navigate('observations')}/></>}
@@ -322,42 +411,198 @@ function ObservationDialog({data,initial,selectedId,blocked,onClose,onSave}:{dat
     </form>
   </dialog>;
 }
-function DraftEditor({data,studentId,setData,notify,onAdd,onTransfer,isCurrentWorkspace,onRequestLogin}:{data:WorkspaceData;studentId:string;setData:SetWorkspace;notify:(s:string)=>void;onAdd:()=>void;onTransfer:()=>void;onRequestLogin:()=>void;isCurrentWorkspace:(snapshot:WorkspaceData)=>boolean}){
-  const student=data.students.find(s=>s.id===studentId)!;
-  const draft=data.drafts.find(d=>d.studentId===studentId);
-  const observations=data.observations.filter(o=>o.studentId===studentId);
-  const [busy,setBusy]=useState(false);
-  const [tab,setTab]=useState<'evidence'|'checks'>('evidence');
-  if(!draft) return <div className="card empty-state"><FileText size={30}/><h2>준비된 문장이 없습니다.</h2><button className="button primary" onClick={()=>{try{setData(current=>current.drafts.some(item=>item.studentId===studentId)?current:{...current,drafts:[...current.drafts,{id:crypto.randomUUID(),studentId,content:'',evidenceIds:[],status:'draft',updatedAt:new Date().toISOString()}]});}catch(error){notify(error instanceof Error?error.message:'문장을 만들지 못했습니다.');}}}>새 문장 만들기</button></div>;
-  const studentIssues=getIssues(data).filter(i=>i.studentId===studentId);
+type DraftEditorProps = {
+  data: WorkspaceData;
+  studentId: string;
+  setData: SetWorkspace;
+  notify: (message: string) => void;
+  onAdd: () => void;
+  onTransfer: () => void;
+  isCurrentWorkspace: (snapshot: WorkspaceData) => boolean;
+  onRequestLogin: () => void;
+  jump: ReviewJump | null;
+  nextStudent?: Student;
+  onNext: (student: Student) => void;
+};
+
+function DraftEditor({
+  data, studentId, setData, notify, onAdd, onTransfer, isCurrentWorkspace,
+  onRequestLogin, jump, nextStudent, onNext,
+}: DraftEditorProps) {
+  const student = data.students.find(s => s.id === studentId)!;
+  const draft = data.drafts.find(d => d.studentId === studentId);
+  const observations = data.observations.filter(o => o.studentId === studentId);
+  const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<'evidence' | 'checks'>(jump?.check ? 'checks' : 'evidence');
+  const handledJump = useRef<ReviewJump | null>(null);
+
+  useEffect(() => {
+    if (!jump || handledJump.current === jump) return;
+    const expectedTab = jump.check ? 'checks' : 'evidence';
+    if (tab !== expectedTab) { setTab(expectedTab); return; }
+    handledJump.current = jump;
+    const target = document.getElementById(jump.target);
+    const focusTarget = target && !target.matches(':disabled') ? target
+      : document.getElementById('clear-invalid-evidence') ?? document.getElementById('create-review-draft') ?? document.getElementById('review-student-heading');
+    focusTarget?.focus();
+  }, [jump, tab]);
+
+  const createDraft = () => {
+    try {
+      setData(current => current.drafts.some(item => item.studentId === studentId) ? current : {
+        ...current,
+        drafts: [...current.drafts, { id: crypto.randomUUID(), studentId, content: '', evidenceIds: [], status: 'draft', updatedAt: new Date().toISOString() }],
+      });
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '문장을 만들지 못했습니다.');
+    }
+  };
+  if (!draft) return <div className="card empty-state">
+    <FileText size={30}/>
+    <h2 id="review-student-heading" tabIndex={-1}>{student.number}번 {student.name}</h2>
+    <p>준비된 문장이 없습니다.</p>
+    <button id="create-review-draft" className={`button ${observations.length ? 'primary' : 'secondary'}`} onClick={createDraft}>새 문장 만들기</button>
+    {!observations.length && <button id="add-review-observation" className="button primary" onClick={onAdd}>이 학생의 관찰 기록 추가</button>}
+  </div>;
+
+  const studentIssues = getIssues(data).filter(issue => issue.studentId === studentId);
   const readyToTransfer = (draft.status === 'reviewed' || draft.status === 'copied') && studentIssues.length === 0;
-  const validEvidenceIds=draft.evidenceIds.filter(id=>observations.some(observation=>observation.id===id));
-  const invalidEvidenceCount=draft.evidenceIds.length-validEvidenceIds.length;
-  const mutate=(content:string,evidenceIds:string[])=>{
-    if(busy)return false;
-    try{
-      setData(current=>{
-        if(current!==data)throw new Error('자료가 변경되었습니다. 현재 내용을 확인한 뒤 다시 수정해 주세요.');
-        return updateDraft(current,draft.id,content,evidenceIds);
+  const validEvidenceIds = draft.evidenceIds.filter(id => observations.some(observation => observation.id === id));
+  const invalidEvidenceCount = draft.evidenceIds.length - validEvidenceIds.length;
+  const reviewing = draft.status === 'draft';
+  const hasText = !!draft.content.trim();
+  const reviewReady = reviewing && hasText && draft.evidenceIds.length > 0 && invalidEvidenceCount === 0;
+  const focus = (id: string) => document.getElementById(id)?.focus();
+  const openEvidence = () => {
+    if (tab === 'evidence') focus('review-evidence');
+    else {
+      setTab('evidence');
+      // The panel is mounted by the tab change before the next paint.
+      requestAnimationFrame(() => focus('review-evidence'));
+    }
+  };
+  const mutate = (content: string, evidenceIds: string[]) => {
+    if (busy) return false;
+    try {
+      setData(current => {
+        if (current !== data) throw new Error('자료가 변경되었습니다. 현재 내용을 확인한 뒤 다시 수정해 주세요.');
+        return updateDraft(current, draft.id, content, evidenceIds);
       });
       return true;
-    }catch(e){notify(e instanceof Error?e.message:'저장하지 못했습니다.');return false;}
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '저장하지 못했습니다.');
+      return false;
+    }
   };
-  const transition=async(status:Draft['status'])=>{
-    if(busy)return;
+  const transition = async (status: Draft['status'], advance = false) => {
+    if (busy) return;
     setBusy(true);
-    try{
-      if(status==='copied'){
-        if(!navigator.clipboard?.writeText)throw new Error('이 브라우저에서는 클립보드에 접근할 수 없습니다. 문장을 직접 선택해 복사해 주세요.');
+    try {
+      if (status === 'copied') {
+        if (!navigator.clipboard?.writeText) throw new Error('이 브라우저에서는 클립보드에 접근할 수 없습니다. 문장을 직접 선택해 복사해 주세요.');
         await navigator.clipboard.writeText(draft.content);
       }
-      setData(current=>{
-        if(current!==data)throw new Error(status==='copied'?'복사하는 동안 자료가 변경되어 상태를 바꾸지 않았습니다. 최신 문장을 확인하고 다시 복사해 주세요.':'자료가 변경되었습니다. 현재 내용을 확인한 뒤 다시 진행해 주세요.');
-        return transitionDraft(current,draft.id,status,{clipboardSucceeded:status==='copied'});
+      setData(current => {
+        if (current !== data) throw new Error(status === 'copied'
+          ? '복사하는 동안 자료가 변경되어 상태를 바꾸지 않았습니다. 최신 문장을 확인하고 다시 복사해 주세요.'
+          : '자료가 변경되었습니다. 현재 내용을 확인한 뒤 다시 진행해 주세요.');
+        return transitionDraft(current, draft.id, status, { clipboardSucceeded: status === 'copied' });
       });
-      notify(status==='copied'?'문장을 복사했습니다. 나이스에서 학생을 확인한 뒤 붙여넣어 주세요.':status==='confirmed'?'나이스 반영을 직접 확인한 것으로 기록했습니다.':'문장 검토를 완료했습니다.');
-    }catch(e){notify(e instanceof Error?e.message:'처리하지 못했습니다.');}finally{setBusy(false);}
+      if (status === 'reviewed' && advance && nextStudent) {
+        onNext(nextStudent);
+        notify(`${student.number}번 ${student.name} 검토를 저장했습니다. ${nextStudent.number}번 ${nextStudent.name} 학생으로 이동했습니다.`);
+      } else if (status === 'reviewed') {
+        notify(nextStudent ? '문장 검토를 완료했습니다.' : '우리 반 학생의 문장 검토를 모두 마쳤습니다.');
+      } else {
+        notify(status === 'copied' ? '문장을 복사했습니다. 나이스에서 학생을 확인한 뒤 붙여넣어 주세요.' : '나이스 반영을 직접 확인한 것으로 기록했습니다.');
+      }
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '처리하지 못했습니다.');
+    } finally {
+      setBusy(false);
+    }
   };
-  return <div className="editor-column"><section className="card editor-card"><div className="editor-title"><div className="row"><Avatar number={student.number}/><div><h2>{student.name} <span className="muted">{student.number}번</span></h2><p>행동특성 및 종합의견 · 작성 연습</p></div></div><Status value={draft.status}/></div><div className="workflow-steps">{(['draft','reviewed','copied','confirmed'] as const).map((s,i)=><div key={s} className={(['draft','reviewed','copied','confirmed'].indexOf(draft.status)>=i)?'done':''}><span>{i+1}</span>{STATUS[s]}{i<3&&<ChevronRight size={14}/>}</div>)}</div><div className="editor-body">{invalidEvidenceCount>0&&<div className="notice error" id="invalid-evidence"><span>연결한 기록 {invalidEvidenceCount}건을 이 학생의 관찰 기록에서 찾을 수 없습니다. 유효하지 않은 연결을 해제한 뒤 문장을 수정해 주세요.</span><button className="text-button" disabled={busy} onClick={()=>{if(mutate(draft.content,validEvidenceIds))notify('유효하지 않은 근거 연결을 해제했습니다. 관찰 기록을 다시 선택해 주세요.');}}>유효하지 않은 근거 연결 해제</button></div>}<div className="row between"><label htmlFor="draft-content" className="editor-label">나이스에 입력할 문장</label><span className="save-label"><Check size={13}/>변경 내용 자동 저장</span></div><textarea id="draft-content" className="draft-textarea" disabled={busy||invalidEvidenceCount>0} aria-describedby={invalidEvidenceCount>0?'invalid-evidence':undefined} value={draft.content} maxLength={6000} onChange={e=>mutate(e.target.value,draft.evidenceIds)} placeholder="키워드를 적고 AI 생성을 눌러 보세요. 예: 친구 의견 경청, 모둠 협력, 맡은 역할 책임감"/><div className="editor-counter"><span>{Array.from(draft.content).length}자 · UTF-8 {utf8ByteLength(draft.content)}바이트</span><span>실제 나이스 제한은 입력 화면에서 확인</span></div><AiDraftControls onRequestLogin={onRequestLogin} data={data} draft={draft} disabled={busy||invalidEvidenceCount>0} isCurrentWorkspace={isCurrentWorkspace} onApply={text=>{const saved=mutate(text,draft.evidenceIds);if(saved)notify('AI 초안을 적용했습니다. 사실과 근거를 확인하고 다시 검토해 주세요.');return saved;}}/><div className="notice subtle"><ShieldCheck size={17}/><span>문장이나 근거를 수정하면 다시 검토해야 합니다. 이 화면은 나이스에 자동으로 전송하지 않습니다.</span></div><div className="editor-actions"><button className="button secondary" disabled={busy||invalidEvidenceCount>0||!draft.content.trim()||!draft.evidenceIds.length||draft.status!=='draft'} onClick={()=>transition('reviewed')}><ClipboardCheck size={17}/>검토 완료</button><button className="button primary" disabled={busy||draft.status==='draft'} onClick={()=>transition('copied')}><Copy size={17}/>문장 복사</button><button className="button confirm-button" disabled={busy||draft.status!=='copied'} onClick={()=>{if(window.confirm(`${student.name} 학생의 나이스 화면에서 저장된 내용을 직접 확인하셨나요?`))void transition('confirmed');}}><CircleCheck size={17}/>나이스 반영 확인</button><button className="button secondary" type="button" aria-label="검토한 문장을 나이스로 옮기기" disabled={busy || !readyToTransfer} onClick={onTransfer}><ArrowUpRight size={17}/>나이스로 옮기기</button></div><p className="input-help">{readyToTransfer ? '검토한 문장을 복사하거나, 옮길 문장 파일로 준비하세요. 나이스 저장은 직접 확인해야 합니다.' : draft.status === 'confirmed' ? '이 문장은 나이스 저장을 직접 확인한 것으로 기록돼 있습니다.' : !draft.content.trim() ? '문장을 작성하고 관찰 근거를 선택하면 검토할 수 있습니다.' : !draft.evidenceIds.length ? '아래에서 이 학생의 관찰 근거를 먼저 선택해 주세요.' : draft.status === 'draft' ? '사실과 근거를 확인하고 검토 완료를 누르면 문장을 옮길 수 있습니다.' : '점검 항목을 해결하면 옮길 문장 파일을 준비할 수 있습니다.'}</p></div></section>
-  <section className="card"><div className="editor-tabs"><button className={tab==='evidence'?'active':''} onClick={()=>setTab('evidence')}><NotebookPen size={17}/>관찰 근거 <span>{observations.length}</span></button><button className={tab==='checks'?'active':''} onClick={()=>setTab('checks')}><AlertCircle size={17}/>점검 항목 <span>{studentIssues.length}</span></button></div>{tab==='evidence'?<div className="evidence-panel"><div className="row between"><p className="muted">이 문장의 근거가 되는 기록을 선택해 주세요.</p><button className="text-button" disabled={busy} onClick={onAdd}><Plus size={15}/>기록 추가</button></div>{observations.map(o=><label className={`evidence-item ${draft.evidenceIds.includes(o.id)?'checked':''}`} key={o.id}><input type="checkbox" disabled={busy||invalidEvidenceCount>0} checked={draft.evidenceIds.includes(o.id)} onChange={e=>mutate(draft.content,e.target.checked?[...draft.evidenceIds,o.id]:draft.evidenceIds.filter(id=>id!==o.id))}/><span><span className="observation-meta"><span className="badge neutral">{o.category}</span><time>{o.date.replaceAll('-','.')}</time></span><span className="evidence-text">{o.content}</span></span></label>)}{observations.length===0&&<div className="empty-state"><NotebookPen size={28}/><strong>관찰 기록을 먼저 남겨 주세요.</strong></div>}<button className="button secondary evidence-compose" disabled={busy||invalidEvidenceCount>0||!draft.evidenceIds.length} onClick={()=>{if(draft.content.trim()&&!window.confirm('선택한 관찰 기록으로 현재 문장을 바꿀까요?'))return;if(mutate(observations.filter(o=>draft.evidenceIds.includes(o.id)).map(o=>o.content).join(' '),draft.evidenceIds))notify('선택한 원문을 모았습니다. 선생님의 표현으로 다듬어 주세요.');}}><FileText size={16}/>선택한 관찰 원문 모으기</button><p className="input-help">AI 생성 없이, 선택한 기록을 그대로 모읍니다.</p></div>:<div className="evidence-panel">{studentIssues.map(i=><div className="inline-issue" key={i.id}><AlertCircle size={19}/><div><strong>{i.title}</strong><p>{i.detail}</p></div></div>)}{studentIssues.length===0&&<div className="empty-state"><CircleCheck size={30}/><strong>자동 점검에서 발견한 항목이 없습니다.</strong><p>기재 적합성은 선생님이 최종 확인해 주세요.</p></div>}</div>}</section></div>;
+
+  return <section className="card editor-card review-editor">
+    <div className="editor-title">
+      <div className="row"><Avatar number={student.number}/><div>
+        <h2 id="review-student-heading" tabIndex={-1}>{student.name} <span className="muted">{student.number}번</span></h2>
+        <p>행동특성 및 종합의견 · 작성 연습</p>
+      </div></div>
+      <Status value={draft.status}/>
+    </div>
+    <div className="review-editor-layout">
+      <div className="editor-body review-writing">
+        {invalidEvidenceCount > 0 && <div className="notice error" id="invalid-evidence">
+          <span>이 학생의 관찰 기록에서 연결한 근거 {invalidEvidenceCount}건을 찾을 수 없습니다.</span>
+          <button id="clear-invalid-evidence" className="button primary" disabled={busy}
+            onClick={() => { if (mutate(draft.content, validEvidenceIds)) { notify('유효하지 않은 근거 연결을 해제했습니다. 관찰 기록을 다시 선택해 주세요.'); openEvidence(); } }}>
+            유효하지 않은 근거 연결 해제
+          </button>
+        </div>}
+        <div className="row between"><label htmlFor="draft-content" className="editor-label">나이스에 입력할 문장</label><span className="save-label"><Check size={13}/>변경 내용 자동 저장</span></div>
+        <textarea id="draft-content" className="draft-textarea" disabled={busy || invalidEvidenceCount > 0}
+          aria-describedby={invalidEvidenceCount > 0 ? 'invalid-evidence' : undefined}
+          value={draft.content} maxLength={6000} onChange={event => mutate(event.target.value, draft.evidenceIds)}
+          placeholder="관찰한 사실로 문장을 쓰거나, 키워드를 적고 AI 초안을 만들어 보세요."/>
+        <div className="editor-counter"><span>{Array.from(draft.content).length}자 · UTF-8 {utf8ByteLength(draft.content)}바이트</span><span>실제 나이스 제한은 입력 화면에서 확인</span></div>
+      </div>
+      <section className="review-evidence-column" aria-label="관찰 근거 및 점검">
+        <div className="editor-tabs" role="group" aria-label="관찰 근거 및 점검 보기">
+          <button type="button" className={tab === 'evidence' ? 'active' : ''} aria-pressed={tab === 'evidence'} onClick={() => setTab('evidence')}><NotebookPen size={17}/>관찰 근거 <span>{observations.length}</span></button>
+          <button type="button" className={tab === 'checks' ? 'active' : ''} aria-pressed={tab === 'checks'} onClick={() => setTab('checks')}><AlertCircle size={17}/>점검 항목 <span>{studentIssues.length}</span></button>
+        </div>
+        {tab === 'evidence' ? <div className="evidence-panel" id="review-evidence" tabIndex={-1} role="region" aria-label="관찰 근거 선택">
+          <div className="row between"><p className="muted">이 문장을 뒷받침하는 관찰을 선택하세요.</p><button id="add-review-observation" className="text-button" disabled={busy} onClick={onAdd}><Plus size={15}/>기록 추가</button></div>
+          {observations.map(observation => <label className={`evidence-item ${draft.evidenceIds.includes(observation.id) ? 'checked' : ''}`} key={observation.id}>
+            <input type="checkbox" disabled={busy || invalidEvidenceCount > 0} checked={draft.evidenceIds.includes(observation.id)}
+              onChange={event => mutate(draft.content, event.target.checked ? [...draft.evidenceIds, observation.id] : draft.evidenceIds.filter(id => id !== observation.id))}/>
+            <span><span className="observation-meta"><span className="badge neutral">{observation.category}</span><time>{observation.date.replaceAll('-', '.')}</time></span><span className="evidence-text">{observation.content}</span></span>
+          </label>)}
+          {!observations.length && <p className="muted">관찰 기록을 먼저 남겨 주세요.</p>}
+          {observations.length > 0 && <button className="button secondary evidence-compose" disabled={busy || invalidEvidenceCount > 0 || !draft.evidenceIds.length} onClick={() => {
+            if (hasText && !window.confirm('선택한 관찰 기록으로 현재 문장을 바꿀까요?')) return;
+            if (mutate(observations.filter(o => draft.evidenceIds.includes(o.id)).map(o => o.content).join(' '), draft.evidenceIds)) notify('선택한 원문을 모았습니다. 선생님의 표현으로 다듬어 주세요.');
+          }}><FileText size={16}/>선택한 관찰 원문 모으기</button>}
+        </div> : <div className="evidence-panel">
+          {studentIssues.map(issue => <div id={`review-issue-${issue.id}`} tabIndex={-1} className="inline-issue" key={issue.id}>
+            <AlertCircle size={19}/><div><strong>{issue.title}</strong><p>{issue.detail}</p></div>
+          </div>)}
+          {!studentIssues.length && <p className="muted">자동 점검에서 발견한 항목이 없습니다.</p>}
+        </div>}
+      </section>
+      <div className="editor-body review-controls">
+        <AiDraftControls onRequestLogin={onRequestLogin} data={data} draft={draft} disabled={busy || invalidEvidenceCount > 0}
+          isCurrentWorkspace={isCurrentWorkspace} onApply={value => {
+            const saved = mutate(value, draft.evidenceIds);
+            if (saved) notify('AI 초안을 적용했습니다. 사실과 근거를 확인하고 다시 검토해 주세요.');
+            return saved;
+          }}/>
+        <div className="editor-actions">
+          {reviewing && !invalidEvidenceCount && (!observations.length
+            ? <button type="button" className="button primary" onClick={onAdd} disabled={busy}>이 학생의 관찰 기록 추가</button>
+            : !hasText
+              ? <button type="button" className="button primary" onClick={() => focus('draft-content')} disabled={busy}>문장 작성</button>
+              : !draft.evidenceIds.length
+                ? <button type="button" className="button primary" onClick={openEvidence} disabled={busy}>관찰 근거 선택</button>
+                : null)}
+          {reviewReady && nextStudent && <button id="review-next-action" type="button" className="button primary"
+            onClick={() => void transition('reviewed', true)} disabled={busy}><ClipboardCheck size={17}/>검토하고 다음 학생 <ChevronRight size={16}/></button>}
+          <button id={reviewReady && !nextStudent ? 'review-next-action' : undefined} type="button"
+            className={`button ${reviewReady && !nextStudent ? 'primary' : 'secondary'}`} disabled={!reviewReady || busy}
+            onClick={() => void transition('reviewed')}><ClipboardCheck size={17}/>검토 완료</button>
+          <button type="button" className={`button ${draft.status === 'reviewed' ? 'primary' : 'secondary'}`} disabled={busy || reviewing}
+            onClick={() => void transition('copied')}><Copy size={17}/>문장 복사</button>
+          <button type="button" className={`button ${draft.status === 'copied' ? 'primary' : 'secondary'}`} disabled={busy || draft.status !== 'copied'}
+            onClick={() => { if (window.confirm(`${student.name} 학생의 나이스 화면에서 저장된 내용을 직접 확인하셨나요?`)) void transition('confirmed'); }}><CircleCheck size={17}/>나이스 반영 확인</button>
+          <button className="button secondary" type="button" aria-label="검토한 문장을 나이스로 옮기기" disabled={busy || !readyToTransfer}
+            onClick={onTransfer}><ArrowUpRight size={17}/>나이스로 옮기기</button>
+        </div>
+        {reviewReady && nextStudent && <p className="input-help">다음 미검토 학생 · {nextStudent.number}번 {nextStudent.name}</p>}
+        {draft.status === 'reviewed' && <p className="input-help">문장을 복사하거나 옮길 파일을 준비하세요. 나이스 저장은 직접 확인해야 합니다.</p>}
+        {draft.status === 'copied' && <p className="input-help">나이스 화면에서 이 학생의 문장을 저장한 뒤 반영을 확인해 주세요.</p>}
+        {draft.status === 'confirmed' && <p className="input-help">나이스에서 저장된 내용을 직접 확인한 문장입니다.</p>}
+      </div>
+    </div>
+  </section>;
 }

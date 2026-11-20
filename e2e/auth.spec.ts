@@ -502,6 +502,7 @@ test('사용 안내를 키보드로 접고 다시 열면 초점을 유지하고 
   await mockSupabase(page, baseURL!);
   await page.goto('/');
   const heading = page.getByRole('heading', { name: '하루 한 줄부터 시작해 보세요.', exact: true });
+  await page.getByRole('button', { name: '사용 안내 다시 보기', exact: true }).press('Enter');
   await expect(heading).toBeVisible();
   await page.getByRole('button', { name: '사용 안내 접기', exact: true }).press('Enter');
   const toggle = page.getByRole('button', { name: '사용 안내 다시 보기', exact: true });

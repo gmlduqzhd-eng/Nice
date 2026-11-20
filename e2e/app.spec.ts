@@ -65,6 +65,7 @@ test("관찰 기록 추가 결과와 학생 연결이 새로고침 후에도 유
 });
 
 test("첫 사용 안내에서 학생별 기록을 이어 쓰면 날짜·분류를 유지하고 한 건씩 저장한다", async ({ page }) => {
+  await page.getByRole("button", { name: "사용 안내 다시 보기", exact: true }).click();
   await expect(page.getByRole("heading", { name: "하루 한 줄부터 시작해 보세요.", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /첫 관찰 남기기/ }).click();
   const dialog = page.getByRole("dialog");
@@ -108,6 +109,8 @@ test("첫 사용 안내에서 학생별 기록을 이어 쓰면 날짜·분류�
 
 test("사용 안내를 접은 상태가 유지되고 저작권 안내를 열어 확인할 수 있다", async ({ page }) => {
   const heading = page.getByRole("heading", { name: "하루 한 줄부터 시작해 보세요.", exact: true });
+  await expect(heading).toHaveCount(0);
+  await page.getByRole("button", { name: "사용 안내 다시 보기", exact: true }).click();
   await page.getByRole("button", { name: /입력 문장 준비하기/ }).click();
   await expect(page.getByRole("heading", { name: "문장 작성·검토", exact: true, level: 1 })).toBeVisible();
   await page.getByRole("navigation", { name: "주 메뉴" }).getByRole("button", { name: /^업무 한눈에/ }).click();

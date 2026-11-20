@@ -16,8 +16,8 @@ export default function GettingStarted({ onRecord, onPrepare, onBackup, onClassr
   const toggle = useRef<HTMLButtonElement>(null);
   const returnFocus = useRef<'heading' | 'toggle' | null>(null);
   useEffect(() => {
-    try { setExpanded(localStorage.getItem(GUIDE_KEY) !== 'true'); }
-    catch { setExpanded(true); }
+    try { setExpanded(localStorage.getItem(GUIDE_KEY) === 'false'); }
+    catch { /* The guide can still be opened manually. */ }
   }, []);
   useEffect(() => {
     if (!returnFocus.current) return;
