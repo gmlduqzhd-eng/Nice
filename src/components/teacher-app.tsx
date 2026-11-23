@@ -5,6 +5,7 @@ import { BookOpen, LayoutDashboard, NotebookPen, ClipboardCheck, School, Setting
 import { addObservation, deleteObservation, editObservation, getIssues, transitionDraft, updateDraft, utf8ByteLength, type Draft, type Issue, type Observation, type Student, type WorkspaceData } from '@/lib/domain';
 import { createDemoWorkspace } from '@/lib/demo';
 import SettingsPanel from './settings-panel';
+import DashboardBackup from './dashboard-backup';
 import SchoolPanel from './school-panel';
 import { AuthProvider, useAuth } from './auth-provider';
 import GettingStarted from './getting-started';
@@ -345,6 +346,7 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
               </button>
             </div>
           </section>
+          {ready && userId && <DashboardBackup userId={userId} data={data} onOpen={() => navigate('settings')} />}
           <GettingStarted onRecord={startObservation} onPrepare={resumeReview} onBackup={() => navigate('settings')} onClassroom={() => navigate('classroom')} />
           <div className="stats-grid">
             <button className="stat-card" onClick={() => { setFilter('all'); setQuery(''); setAllIssues(false); document.getElementById('issues')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}><span className="stat-top">확인이 필요한 항목 <span className="stat-icon orange"><AlertCircle size={18}/></span></span><span className="stat-value">{issues.length}<small>건</small></span><span className="stat-caption"><span className="orange-text">누락 · 검토 필요</span> 항목을 확인해 주세요</span></button>

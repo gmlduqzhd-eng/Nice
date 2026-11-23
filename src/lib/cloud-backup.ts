@@ -1,6 +1,28 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { WorkspaceData } from './domain';
 
+export async function readCloudBackup(client: SupabaseClient, userId: string) {
+  const { data, error } = await client.from('teacher_workspaces')
+    .select('data, updated_at')
+    .eq('user_id', userId)
+    .maybeSingle<{ data: unknown; updated_at: string }>();
+  if (error) throw error;
+  return data;
+}
+
+export function formatBackupTime(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '시간 확인 불가' : date.toLocaleString('ko-KR');
+}
+
+export function backupContents(data: WorkspaceData) {
+  // JSONB may return object keys in a different order from browser records.
+  return JSON.stringify(data, (_key, value: unknown) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return value;
+    return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)));
+  });
+}
+
 export class CloudBackupConflict extends Error {
   constructor() {
     super('클라우드 백업이 다른 곳에서 변경되어 덮어쓰지 않았습니다. 현재 기록을 JSON으로 보관한 뒤 최신 클라우드 백업을 확인해 주세요.');

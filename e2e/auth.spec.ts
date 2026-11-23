@@ -1,6 +1,7 @@
 import { mockSupabase, TEST_EMAIL, TEST_USER_ID, GOOGLE_TEST_CREDENTIAL } from './helpers/supabase';
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import type { WorkspaceData } from "../src/lib/domain";
 import { createDemoWorkspace } from "../src/lib/demo";
 
@@ -51,7 +52,7 @@ test("체험 공간과 두 계정의 명부는 섞이지 않고 재로그인하�
   await again.completeMagicLink(); await navigateRoster();
   await expect(page.locator(".roster-table")).toContainText("가상계정A");
   await expect(page.locator(".roster-table")).not.toContainText("가상계정B");
-  expect([...a.cloudRequests(), ...b.cloudRequests(), ...again.cloudRequests()]).toHaveLength(0);
+  expect([...a.cloudWrites(), ...b.cloudWrites(), ...again.cloudWrites()]).toHaveLength(0);
 });
 
 async function expectAuthDialog(page: Page) {
@@ -85,7 +86,8 @@ test("이메일 링크로 새 계정과 기존 계정을 같은 화면에서 시
   await expect(dialog.getByRole("button", { name: /초 후 다시 받기/ })).toBeDisabled();
   expect(mock.cloudRequests()).toHaveLength(0);
   await mock.completeMagicLink();
-  expect(mock.cloudRequests()).toHaveLength(0);
+  await expect(page.getByRole("status", { name: "계정 백업 상태" })).toContainText("아직 이 계정에 저장한 백업이 없습니다.");
+  expect(mock.cloudWrites()).toHaveLength(0);
   await page.reload();
   await expect(page.getByRole("button", { name: "내 계정", exact: true })).toBeVisible();
   expect(mock.cloudWrites()).toHaveLength(0);
@@ -151,10 +153,11 @@ test("로그인 후 명시적으로 저장·불러오고 로그아웃하면 체�
   const mock = await mockSupabase(page, baseURL!);
   await mock.completeMagicLink();
   await page.getByRole('button', { name: '계정 알림 닫기', exact: true }).click();
-  expect(mock.cloudRequests()).toHaveLength(0);
-  await openSettings(page);
+  const home = page.getByRole("region", { name: "계정 백업", exact: true });
+  await expect(home).toContainText("아직 이 계정에 저장한 백업이 없습니다.");
+  await home.getByRole("button", { name: "계정 백업 열기", exact: true }).click();
   await expect(page.getByText(TEST_EMAIL, { exact: true })).toBeVisible();
-  expect(mock.cloudRequests()).toHaveLength(0);
+  expect(mock.cloudWrites()).toHaveLength(0);
 
   page.once("dialog", async dialog => { expect(dialog.message()).toContain("클라우드"); await dialog.dismiss(); });
   await page.getByRole("button", { name: "클라우드에 저장", exact: true }).click();
@@ -167,28 +170,37 @@ test("로그인 후 명시적으로 저장·불러오고 로그아웃하면 체�
   expect(mock.state.snapshot?.data.observations).toHaveLength(12);
 
   await page.getByRole("navigation", { name: "주 메뉴" }).getByRole("button", { name: /^업무 한눈에/ }).click();
+  await expect(home.locator("time")).toHaveAttribute("datetime", mock.state.snapshot!.updated_at);
+  await expect(home).toContainText("현재 기록과 일치");
+  const localObservation = "도서 정리 활동에서 친구와 책의 분류를 확인하고 맡은 칸을 정리함.";
   await page.getByRole("button", { name: "관찰 기록 추가", exact: true }).click();
   const observation = page.getByRole("dialog");
-  await observation.getByRole("textbox", { name: "관찰한 내용", exact: true }).fill("도서 정리 활동에서 친구와 책의 분류를 확인하고 맡은 칸을 정리함.");
+  await observation.getByRole("textbox", { name: "관찰한 내용", exact: true }).fill(localObservation);
   await observation.getByRole("button", { name: "기록 저장", exact: true }).click();
   await expect(page.getByRole("button", { name: /쌓인 관찰 기록/ })).toContainText("13");
+  await expect(home).toContainText("백업과 다른 기록 있음");
+  await page.reload();
+  await expect(home).toContainText("백업과 다른 기록 있음");
   expect(mock.cloudWrites()).toHaveLength(1);
-  await openSettings(page);
-  page.once("dialog", async dialog => {
-    expect(dialog.message()).toContain("교체");
-    expect(dialog.message()).toContain("현재 기록: 2026학년도 4학년 2반 2학기 · 학생 8명 · 관찰 13건");
-    expect(dialog.message()).toContain("불러올 백업: 2026학년도 4학년 2반 2학기 · 학생 8명 · 관찰 12건");
-    await dialog.accept();
-  });
+  await home.getByRole("button", { name: "계정 백업 열기", exact: true }).click();
   await page.getByRole("button", { name: "클라우드에서 불러오기", exact: true }).click();
+  const comparison = page.getByRole('region', { name: '불러오기 전 기록 비교' });
+  await expect(comparison.getByRole('heading')).toBeFocused();
+  await expect(comparison.getByRole('row', { name: /^학급/ }).getByRole('cell')).toHaveText(['2026학년도 4학년 2반 2학기', '2026학년도 4학년 2반 2학기']);
+  await expect(comparison.getByRole('row', { name: /^관찰 기록/ }).getByRole('cell')).toHaveText(['13건', '12건']);
+  const filePromise = page.waitForEvent('download');
+  await comparison.getByRole('button', { name: '현재 자료 백업 파일 내려받기' }).click();
+  const file = await filePromise;
+  const saved: WorkspaceData = JSON.parse(await readFile((await file.path())!, 'utf8'));
+  expect(saved.observations).toHaveLength(13);
+  expect(saved.observations.some(row => row.content === localObservation)).toBe(true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('backup-comparison-mobile.png'), fullPage: true, animations: 'disabled' });
+  await comparison.getByRole('button', { name: '계정 백업으로 교체' }).click();
   await expect(page.getByText("클라우드 백업을 이 브라우저로 불러왔습니다.", { exact: true })).toBeVisible();
   const restored = page.getByRole('region', { name: '불러온 백업' });
   await expect(restored).toContainText('학생 8명 · 관찰 12건 · 작성 문장 8건');
-  await page.screenshot({ path: testInfo.outputPath('backup-restored-desktop.png'), fullPage: true, animations: 'disabled' });
-  await page.setViewportSize({ width: 390, height: 844 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await restored.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: testInfo.outputPath('backup-restored-mobile.png'), fullPage: true, animations: 'disabled' });
   await restored.getByRole('button', { name: '관찰 노트에서 확인' }).click();
   await expect(page.getByRole('heading', { name: '관찰 노트', level: 1, exact: true })).toBeVisible();
   await expect(page.locator('.observation-row')).toHaveCount(12);
@@ -244,17 +256,18 @@ for (const existing of [false, true]) {
   });
 }
 
-test('클라우드 조회 중 추가한 관찰은 늦은 복원 응답으로 지워지지 않는다', async ({ page, baseURL }) => {
+test('계정 백업 교체 요청 중 추가한 관찰은 늦은 복원 응답으로 지워지지 않는다', async ({ page, baseURL }) => {
   const mock = await mockSupabase(page, baseURL!);
   mock.state.snapshot = { data: createDemoWorkspace(), updated_at: '2026-09-01T00:00:00.000Z' };
   await mock.completeMagicLink();
   await openSettings(page);
+  await page.getByRole('button', { name: '클라우드에서 불러오기', exact: true }).click();
+  const apply = page.getByRole('button', { name: '계정 백업으로 교체' });
+  await expect(apply).toBeEnabled();
   let readStarted = false;
   const release = Promise.withResolvers<void>();
   mock.state.readGate = async () => { readStarted = true; await release.promise; };
-  let confirmations = 0;
-  page.on('dialog', async dialog => { confirmations++; await dialog.accept(); });
-  await page.getByRole('button', { name: '클라우드에서 불러오기', exact: true }).click();
+  await apply.click();
   await expect.poll(() => readStarted).toBe(true);
   await page.getByRole('button', { name: '관찰 기록 남기기', exact: true }).click();
   const editor = page.getByRole('dialog');
@@ -262,7 +275,7 @@ test('클라우드 조회 중 추가한 관찰은 늦은 복원 응답으로 지
   await editor.getByRole('button', { name: '기록 저장', exact: true }).click();
   release.resolve();
   await expect(page.getByText(/백업 작업 중 현재 기록이 바뀌/)).toBeVisible();
-  expect(confirmations).toBe(0);
+  await expect(apply).toBeDisabled();
   await page.getByRole('navigation', { name: '주 메뉴' }).getByRole('button', { name: '관찰 노트', exact: true }).click();
   await expect(page.getByText('백업 조회를 기다리는 동안 추가한 가상 기록', { exact: true })).toBeVisible();
   await expect(page.getByText('총 13개의 기록', { exact: true })).toBeVisible();
@@ -397,7 +410,7 @@ test("Google 버튼은 해시 nonce를 전달하고 중복 콜백에서도 원�
   expect(createHash("sha256").update(String(rawNonce)).digest("hex")).toBe(hashedNonce);
   expect(new URL(page.url()).origin).toBe(new URL(baseURL!).origin);
   expect(mock.state.requests.filter(request => request.path === "/auth/v1/otp")).toHaveLength(0);
-  expect(mock.cloudRequests()).toHaveLength(0);
+  expect(mock.cloudWrites()).toHaveLength(0);
   expect(mock.state.unexpected).toEqual([]);
 });
 
@@ -427,7 +440,7 @@ test("Google 인증 실패 안내 후 버튼을 다시 눌러 정상 로그인�
   const tokens = mock.state.requests.filter(request => request.path === "/auth/v1/token");
   expect(tokens).toHaveLength(2);
   expect(createHash("sha256").update(String(tokens[1].body?.nonce)).digest("hex")).toBe(nextNonce);
-  expect(mock.cloudRequests()).toHaveLength(0);
+  expect(mock.cloudWrites()).toHaveLength(0);
   expect(mock.state.unexpected).toEqual([]);
 });
 
@@ -452,7 +465,7 @@ test("Google SDK가 차단되면 이메일 입력을 유지하고 다시 준비�
   await google.click();
   await expect(page.getByRole("button", { name: "내 계정", exact: true })).toBeVisible();
   expect(mock.state.requests.filter(request => request.path === "/auth/v1/token")).toHaveLength(1);
-  expect(mock.cloudRequests()).toHaveLength(0);
+  expect(mock.cloudWrites()).toHaveLength(0);
   expect(mock.state.unexpected).toEqual([]);
 });
 

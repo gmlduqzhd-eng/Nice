@@ -92,7 +92,7 @@ test("계정 백업 시각과 일치 여부를 보여 주고 새 편집 뒤에�
   await openSettings(page);
   const backupState = page.getByRole("status", { name: "계정 백업 상태" });
   await expect(backupState).toContainText("저장 또는 불러오기를 눌러 확인하세요");
-  expect(mock.cloudRequests()).toHaveLength(0);
+  expect(mock.cloudWrites()).toHaveLength(0);
   page.once("dialog", async dialog => {
     expect(dialog.message()).toContain("학기말 문장 3건");
     await dialog.accept();
@@ -118,7 +118,7 @@ test("계정 백업 시각과 일치 여부를 보여 주고 새 편집 뒤에�
   expect(mock.state.unexpected).toEqual([]);
 });
 
-test("계정 백업 조회는 키 순서와 무관하게 비교하며 취소한 복원은 현재 기록을 보존한다", async ({ page, baseURL }) => {
+test("홈과 복원 화면은 백업 내용을 비교하고 취소한 복원은 현재 기록을 보존한다", async ({ page, baseURL }) => {
   const mock = await mockSupabase(page, baseURL!);
   const workspace = semesterWorkspace();
   await seedWorkspace(page, TEST_USER_ID, workspace);
@@ -126,26 +126,40 @@ test("계정 백업 조회는 키 순서와 무관하게 비교하며 취소한 
   reordered.semesterPreparation!.entries = Object.fromEntries(Object.entries(reordered.semesterPreparation!.entries).reverse());
   mock.state.snapshot = { data: reordered, updated_at: "2026-10-01T00:00:00.000Z" };
   await mock.completeMagicLink();
-  await openSettings(page);
-  const backupState = page.getByRole("status", { name: "계정 백업 상태" });
-  page.once("dialog", dialog => dialog.dismiss());
-  await page.getByRole("button", { name: "클라우드에서 불러오기", exact: true }).click();
-  await expect(backupState).toContainText("확인한 계정 백업은 현재 기록과 일치합니다");
+  const home = page.getByRole("region", { name: "계정 백업", exact: true });
+  await expect(home).toContainText("현재 기록과 일치");
 
   const changed = structuredClone(workspace);
-  changed.semesterPreparation!.entries["student-3"].content = "다른 PC에서 보관한 가상 학기말 문장.";
+  changed.semesterPreparation!.entries["student-1"].content = "다른 PC에서 수정한 문장이고 건수는 같습니다.";
   mock.state.snapshot = { data: changed, updated_at: "2026-10-02T00:00:00.000Z" };
-  page.once("dialog", async dialog => {
-    expect(dialog.message()).toContain("학기말 문장 3건");
-    await dialog.dismiss();
-  });
-  await page.getByRole("button", { name: "클라우드에서 불러오기", exact: true }).click();
-  await expect(backupState).toContainText("현재 기록과 확인한 계정 백업이 다릅니다");
-  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), workspaceStorageKey(TEST_USER_ID))).toEqual(workspace);
+  await home.getByRole("button", { name: "백업 상태 다시 확인" }).click();
+  await expect(home.locator("time")).toHaveAttribute("datetime", mock.state.snapshot.updated_at);
+  await expect(home).toContainText("백업과 다른 기록 있음");
+  await home.getByRole("button", { name: "계정 백업 열기" }).click();
+  const backupState = page.getByRole("status", { name: "계정 백업 상태" });
+  const compare = page.getByRole("button", { name: "클라우드에서 불러오기", exact: true });
+  const preview = page.getByRole("region", { name: "불러오기 전 기록 비교" });
+  await compare.click();
+  await expect(preview.getByRole("row", { name: /^학기말 문장/ }).getByRole("cell")).toHaveText(["2건", "2건"]);
+  await expect(preview).toContainText("두 기록의 내용이 다릅니다.");
+  await preview.getByRole("button", { name: "복원 취소" }).click();
+  await expect(compare).toBeFocused();
+  await expect(preview).toHaveCount(0);
   await expect(page.getByRole("region", { name: "불러온 백업" })).toHaveCount(0);
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), workspaceStorageKey(TEST_USER_ID))).toEqual(workspace);
 
-  page.once("dialog", dialog => dialog.accept());
-  await page.getByRole("button", { name: "클라우드에서 불러오기", exact: true }).click();
+  await compare.click();
+  await expect(preview).toBeVisible();
+  changed.semesterPreparation!.entries["student-3"].content = "다른 PC에서 보관한 가상 학기말 문장.";
+  mock.state.snapshot = { data: changed, updated_at: "2026-10-03T00:00:00.000Z" };
+  await preview.getByRole("button", { name: "계정 백업으로 교체" }).click();
+  await expect(page.getByText("비교한 뒤 계정 백업이 변경됐습니다. 최신 백업과 다시 비교해 주세요.")).toBeVisible();
+  await expect(preview).toHaveCount(0);
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), workspaceStorageKey(TEST_USER_ID))).toEqual(workspace);
+
+  await compare.click();
+  await expect(preview.getByRole("row", { name: /^학기말 문장/ }).getByRole("cell")).toHaveText(["2건", "3건"]);
+  await preview.getByRole("button", { name: "계정 백업으로 교체" }).click();
   await expect(page.getByRole("region", { name: "불러온 백업" })).toContainText("학기말 문장 3건");
   await expect(backupState).toContainText("확인한 계정 백업은 현재 기록과 일치합니다");
   expect(mock.cloudWrites()).toHaveLength(0);

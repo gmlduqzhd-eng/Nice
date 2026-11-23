@@ -7,7 +7,7 @@ import { createDemoWorkspace } from "@/lib/demo";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { googleAuthEnabled } from "@/lib/google-auth";
 import { useAuth } from "./auth-provider";
-import { CloudBackupConflict, saveCloudBackup } from "@/lib/cloud-backup";
+import { backupContents, CloudBackupConflict, formatBackupTime, readCloudBackup, saveCloudBackup } from "@/lib/cloud-backup";
 import { JSON_BACKUP_SIZE_LABEL, MAX_JSON_BACKUP_BYTES, JsonBackupSizeError, serializeJsonBackup } from "@/lib/json-backup";
 
 type Props = {
@@ -19,23 +19,27 @@ type Props = {
   onViewObservations: () => void;
 };
 
-function savedTime(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "시간 확인 불가" : date.toLocaleString("ko-KR");
+function classroomLabel(data: WorkspaceData) {
+  const { year, grade, room, semester } = data.classroom;
+  return `${year}학년도 ${grade}학년 ${room}반 ${semester}학기`;
 }
 
 function backupSummary(data: WorkspaceData) {
-  const { year, grade, room, semester } = data.classroom;
-  const semesterDrafts = countSemesterSentences(data);
-  return `${year}학년도 ${grade}학년 ${room}반 ${semester}학기 · 학생 ${data.students.length}명 · 관찰 ${data.observations.length}건 · 작성 문장 ${data.drafts.length}건 · 학기말 문장 ${semesterDrafts}건`;
+  return `${classroomLabel(data)} · 학생 ${data.students.length}명 · 관찰 ${data.observations.length}건 · 작성 문장 ${data.drafts.length}건 · 학기말 문장 ${countSemesterSentences(data)}건`;
 }
 
-function backupContents(data: WorkspaceData) {
-  // JSONB may return object keys in a different order from browser records.
-  return JSON.stringify(data, (_key, value: unknown) => {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) return value;
-    return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)));
-  });
+const comparisonRows: [string, (data: WorkspaceData) => string][] = [
+  ["학급", classroomLabel],
+  ["학생", data => `${data.students.length}명`],
+  ["관찰 기록", data => `${data.observations.length}건`],
+  ["행동특성 문장", data => `${data.drafts.length}건`],
+  ["학기말 문장", data => `${countSemesterSentences(data)}건`],
+];
+
+type RestorePreview = { local: WorkspaceData; cloud: WorkspaceData; updatedAt: string };
+
+class RemoteBackupChanged extends Error {
+  constructor() { super("비교한 뒤 계정 백업이 변경됐습니다. 최신 백업과 다시 비교해 주세요."); }
 }
 
 class LocalBackupChanged extends Error {
@@ -50,8 +54,12 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
   const [remoteUpdatedAt, setRemoteUpdatedAt] = useState<string | null>(null);
   const [confirmedCloudWorkspace, setConfirmedCloudWorkspace] = useState<WorkspaceData | null>(null);
   const [restoredWorkspace, setRestoredWorkspace] = useState<WorkspaceData | null>(null);
+  const [preview, setPreview] = useState<RestorePreview | null>(null);
+  const [previewFileMessage, setPreviewFileMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [localMessage, setLocalMessage] = useState<{ text: string; error: boolean } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const previewHeading = useRef<HTMLHeadingElement>(null);
+  const compareButton = useRef<HTMLButtonElement>(null);
   const userIdRef = useRef<string | null>(null);
   const accountRevision = useRef(0);
   const mounted = useRef(false);
@@ -60,6 +68,12 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
   const reportLocal = (text: string, error = false) => { setLocalMessage({ text, error }); onToast(text); };
   const matchesConfirmedBackup = useMemo(() => confirmedCloudWorkspace !== null &&
     backupContents(confirmedCloudWorkspace) === backupContents(data), [confirmedCloudWorkspace, data]);
+  const previewIsStale = !!preview && (readOnly || preview.local !== data);
+  const cloudActionDisabled = cloudBusy || importBusy || authBusy || readOnly;
+
+  useEffect(() => {
+    if (preview) previewHeading.current?.focus();
+  }, [preview]);
 
   useEffect(() => {
     mounted.current = true;
@@ -75,6 +89,7 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
       setCloudMessage("");
       setCloudBusy(false);
       setRestoredWorkspace(null);
+      setPreview(null);
     }) ?? { data: null };
     return () => {
       mounted.current = false;
@@ -93,10 +108,12 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
     setCloudMessage("");
     setCloudBusy(false);
     setRestoredWorkspace(null);
+    setPreview(null);
   }, [user?.id]);
-  async function syncCloud(direction: "upload" | "download") {
+  async function syncCloud(action: "upload" | "compare" | "restore") {
     const client = getSupabase();
     if (!client || !user || operationPending.current || readOnly) return;
+    if (action === "restore" && !preview) return;
     operationPending.current = true;
     const expectedUserId = user.id;
     const revision = accountRevision.current;
@@ -104,40 +121,43 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
     setCloudBusy(true);
     setCloudMessage("");
     setRestoredWorkspace(null);
+    if (action !== "restore") {
+      setPreview(null);
+      setPreviewFileMessage(null);
+    }
     try {
       ensureUnchanged();
+      if (action === "restore" && preview?.local !== data) throw new LocalBackupChanged();
       const { data: identity, error: identityError } = await client.auth.getUser();
       if (identityError || identity.user?.id !== expectedUserId) throw new Error("인증 확인 필요");
       if (!current()) return;
-      const { data: snapshot, error: readError } = await client
-        .from("teacher_workspaces")
-        .select("data, updated_at")
-        .eq("user_id", expectedUserId)
-        .maybeSingle();
-      if (readError) throw readError;
+      const snapshot = await readCloudBackup(client, expectedUserId);
       if (!current()) return;
       ensureUnchanged();
       setRemoteUpdatedAt(snapshot?.updated_at ?? null);
       const remoteWorkspace = snapshot ? parseWorkspace(snapshot.data) : null;
       setConfirmedCloudWorkspace(remoteWorkspace);
 
-      if (direction === "download") {
+      if (action === "compare") {
         if (!snapshot) {
           setCloudMessage("이 계정에 저장된 클라우드 백업이 없습니다.");
           return;
         }
-        const restored = remoteWorkspace;
-        if (!restored) throw new Error("백업 형식 확인 필요");
-        if (!window.confirm(`클라우드 백업으로 현재 기록 공간의 모든 연습 기록을 교체할까요?\n\n현재 기록: ${backupSummary(data)}\n불러올 백업: ${backupSummary(restored)}\n저장 시각: ${savedTime(snapshot.updated_at)}\n\n현재 기록이 필요하면 먼저 JSON 백업을 내려받아 주세요.`)) { if (current()) setCloudMessage("클라우드 백업 복원을 취소했습니다. 현재 기록은 유지됩니다."); return; }
-        if (!current()) return;
-        ensureUnchanged();
-        onReplace(restored);
-        setRestoredWorkspace(restored);
+        if (!remoteWorkspace) throw new Error("백업 형식 확인 필요");
+        setPreview({ local: data, cloud: remoteWorkspace, updatedAt: snapshot.updated_at });
+      } else if (action === "restore" && preview) {
+        if (snapshot?.updated_at !== preview.updatedAt) {
+          setPreview(null);
+          throw new RemoteBackupChanged();
+        }
+        onReplace(preview.cloud);
+        setPreview(null);
+        setRestoredWorkspace(preview.cloud);
         setCloudMessage("클라우드 백업을 이 브라우저로 불러왔습니다.");
         onToast("클라우드 백업을 불러왔습니다.");
-      } else {
+      } else if (action === "upload") {
         const confirmation = snapshot
-          ? `이 계정에 ${savedTime(snapshot.updated_at)} 저장한 백업이 있습니다. 현재 기록 공간의 연습 기록으로 덮어쓸까요?`
+          ? `이 계정에 ${formatBackupTime(snapshot.updated_at)} 저장한 백업이 있습니다. 현재 기록 공간의 연습 기록으로 덮어쓸까요?`
           : "현재 기록 공간의 연습 기록을 로그인한 계정의 클라우드에 저장할까요? 가상 학생의 연습 데이터만 저장해 주세요.";
         if (!window.confirm(`${confirmation}\n\n저장할 기록: ${backupSummary(data)}`)) { if (current()) setCloudMessage("클라우드 저장을 취소했습니다. 현재 기록과 계정 백업은 유지됩니다."); return; }
         if (!current()) return;
@@ -157,7 +177,7 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
         setRemoteUpdatedAt(null);
         setConfirmedCloudWorkspace(null);
       }
-      const conflict = error instanceof CloudBackupConflict || error instanceof LocalBackupChanged;
+      const conflict = error instanceof CloudBackupConflict || error instanceof LocalBackupChanged || error instanceof RemoteBackupChanged;
       const message = conflict ? error.message : "클라우드 작업을 완료하지 못했습니다. 로그인 상태, 연결 상태, 데이터베이스 설정과 백업 형식을 확인해 주세요.";
       setCloudMessage(message);
       onToast(conflict ? "현재 기록을 유지했습니다. 백업 안내를 확인해 주세요." : "클라우드 작업에 실패했습니다. 현재 브라우저 기록은 유지됩니다.");
@@ -167,8 +187,12 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
     }
   }
 
-  function exportBackup() {
+  function exportBackup(fromPreview = false) {
+    const report = fromPreview
+      ? (text: string, error = false) => setPreviewFileMessage({ text, error })
+      : reportLocal;
     try {
+      if (fromPreview && (!preview || preview.local !== data || !isCurrentWorkspace(data))) throw new LocalBackupChanged();
       const blob = new Blob([serializeJsonBackup(data)], { type: "application/json;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
@@ -178,9 +202,9 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
       anchor.click();
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      reportLocal("JSON 백업 다운로드를 시작했습니다. 다운로드한 파일을 보관해 주세요.");
+      report("JSON 백업 다운로드를 시작했습니다. 다운로드한 파일을 보관해 주세요.");
     } catch (error) {
-      reportLocal(error instanceof JsonBackupSizeError ? error.message : "백업 파일을 만들지 못했습니다. 다시 시도해 주세요.", true);
+      report(error instanceof JsonBackupSizeError || error instanceof LocalBackupChanged ? error.message : "백업 파일을 만들지 못했습니다. 다시 시도해 주세요.", true);
     }
   }
 
@@ -270,15 +294,39 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
           <div className="stack">
             <div className="row"><strong>{user.email ?? "로그인 계정"}</strong><button type="button" className="button secondary" onClick={signOut} disabled={authBusy || cloudBusy}><LogOut size={15} aria-hidden="true" /> {authBusy ? "처리 중…" : "로그아웃"}</button></div>
             <div className="row">
-              <button type="button" className="button primary" onClick={() => void syncCloud("upload")} disabled={cloudBusy || importBusy || authBusy || readOnly}><Upload size={16} aria-hidden="true" /> {cloudBusy ? "처리 중…" : "클라우드에 저장"}</button>
-              <button type="button" className="button secondary" onClick={() => void syncCloud("download")} disabled={cloudBusy || importBusy || authBusy || readOnly}><Download size={16} aria-hidden="true" /> 클라우드에서 불러오기</button>
+              <button type="button" className="button primary" onClick={() => void syncCloud("upload")} disabled={cloudActionDisabled}><Upload size={16} aria-hidden="true" /> 클라우드에 저장</button>
+              <button ref={compareButton} type="button" className="button secondary" onClick={() => void syncCloud("compare")} disabled={cloudActionDisabled}><Download size={16} aria-hidden="true" /> 클라우드에서 불러오기</button>
             </div>
+            {cloudBusy && <p role="status" className="muted">계정 백업을 처리하고 있습니다…</p>}
+            {preview && <section className="notice notice-block stack" aria-labelledby="restore-preview-title">
+              <h3 id="restore-preview-title" ref={previewHeading} tabIndex={-1}>불러오기 전 기록 비교</h3>
+              <p>계정 백업 저장 시각 <time dateTime={preview.updatedAt}>{formatBackupTime(preview.updatedAt)}</time></p>
+              <table className="backup-comparison" aria-labelledby="restore-preview-title">
+                <thead><tr><th scope="col">항목</th><th scope="col">이 PC의 현재 기록</th><th scope="col">불러올 계정 백업</th></tr></thead>
+                <tbody>{comparisonRows.map(([label, value]) => <tr key={label}>
+                  <th scope="row">{label}</th><td>{value(preview.local)}</td><td>{value(preview.cloud)}</td>
+                </tr>)}</tbody>
+              </table>
+              {previewIsStale
+                ? <p role="status">현재 기록이 바뀌었거나 저장이 중지됐습니다. 현재 기록을 확인한 뒤 다시 비교해 주세요.</p>
+                : <p>{matchesConfirmedBackup ? "두 기록의 내용이 일치합니다." : "두 기록의 내용이 다릅니다."}</p>}
+              <p id="restore-replaces-current">불러오면 이 PC의 기록을 계정 백업으로 교체합니다. 남겨 둘 자료는 먼저 파일로 내려받으세요.</p>
+              <div className="row">
+                <button type="button" className="button secondary" disabled={cloudActionDisabled || previewIsStale} onClick={() => exportBackup(true)}><Download size={16} aria-hidden="true" /> 현재 자료 백업 파일 내려받기</button>
+                <button type="button" className="button primary" disabled={cloudActionDisabled || previewIsStale} aria-describedby="restore-replaces-current" onClick={() => void syncCloud("restore")}>계정 백업으로 교체</button>
+                <button type="button" className="button secondary" disabled={cloudBusy} onClick={() => {
+                  setPreview(null);
+                  setCloudMessage("클라우드 백업 복원을 취소했습니다. 현재 기록은 유지됩니다.");
+                  compareButton.current?.focus();
+                }}>복원 취소</button>
+              </div>
+              {previewFileMessage && <p role={previewFileMessage.error ? "alert" : "status"}>{previewFileMessage.text}</p>}
+            </section>}
             <div className="notice notice-block" role="status" aria-label="계정 백업 상태">
-              <strong>{remoteUpdatedAt ? `마지막으로 확인한 계정 백업 시각: ${savedTime(remoteUpdatedAt)}` : "계정 백업 시각은 저장 또는 불러오기를 눌러 확인하세요."}</strong>
+              <strong>{remoteUpdatedAt ? `마지막으로 확인한 계정 백업 시각: ${formatBackupTime(remoteUpdatedAt)}` : "계정 백업 시각은 저장 또는 불러오기를 눌러 확인하세요."}</strong>
               {remoteUpdatedAt && <p>{confirmedCloudWorkspace
-                ? matchesConfirmedBackup ? "확인한 계정 백업은 현재 기록과 일치합니다." : "현재 기록과 확인한 계정 백업이 다릅니다. 이 PC의 기록을 이어 쓰려면 계정에 다시 저장하세요."
+                ? matchesConfirmedBackup ? "확인한 계정 백업은 현재 기록과 일치합니다." : "현재 기록과 확인한 계정 백업이 다릅니다."
                 : "확인한 백업의 내용을 비교하지 못했습니다. 안내를 확인하고 다시 시도하세요."}</p>}
-              <p>다른 PC에서 바꾼 내용은 여기서 자동으로 확인하지 않습니다.</p>
             </div>
             <p className="muted">계정을 바꾸면 해당 계정의 별도 기록 공간을 엽니다. 로그아웃하면 로그인 전 체험 공간으로 돌아갑니다.</p>
           </div>
@@ -293,8 +341,8 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
           <strong>다른 PC에서 이어하기</strong>
           <ol>
             <li>지금 PC에서 로그인한 뒤 ‘클라우드에 저장’을 누르고 저장 완료 안내를 확인하세요.</li>
-            <li>다른 PC에서 같은 계정으로 로그인하고 ‘설정 및 백업’을 여세요.</li>
-            <li>‘클라우드에서 불러오기’를 눌러 학급과 기록 수를 확인한 뒤 가져오세요.</li>
+            <li>다른 PC에서 같은 계정으로 로그인하고 홈의 ‘계정 백업 열기’를 누르세요.</li>
+            <li>‘클라우드에서 불러오기’에서 두 기록을 비교하고, 필요한 자료를 파일로 내려받은 뒤 교체하세요.</li>
           </ol>
           <p>가져오면 그 PC의 현재 기록을 교체합니다. 남겨 둘 기록은 먼저 전체 기록 백업 파일로 내려받으세요. 이어 쓴 뒤에도 계정 백업을 직접 저장해야 합니다.</p>
         </div>
@@ -307,7 +355,7 @@ export default function SettingsPanel({ data, onReplace, onToast, isCurrentWorks
         <p className="muted">편집한 기록은 이 PC의 현재 브라우저에 자동 저장됩니다. 관찰 기록·작성 문장·학기말 문장을 한 파일로 보관하거나 다른 브라우저로 옮길 때 아래 버튼을 이용하세요. 브라우저 데이터를 삭제하면 이 PC의 기록이 사라질 수 있습니다.</p>
         <p className="muted">로그인 전 체험 기록은 계정으로 자동 이전되지 않습니다. 옮기려면 로그인 전에 전체 기록 백업 파일을 내려받고, 로그인 후 그 파일을 불러오세요.</p>
         <div className="row">
-          <button type="button" className="button secondary" onClick={exportBackup}><Download size={16} aria-hidden="true" /> 전체 기록 백업 파일 내려받기</button>
+          <button type="button" className="button secondary" onClick={() => exportBackup()}><Download size={16} aria-hidden="true" /> 전체 기록 백업 파일 내려받기</button>
           <button type="button" className="button secondary" onClick={() => fileInput.current?.click()} disabled={importBusy || cloudBusy || readOnly}><Upload size={16} aria-hidden="true" /> {importBusy ? "백업 읽는 중…" : "전체 기록 백업 파일 불러오기"}</button>
           <input ref={fileInput} type="file" accept=".json,application/json" hidden aria-label="JSON 백업 파일 선택" onChange={importBackup} disabled={importBusy || cloudBusy || readOnly} />
         </div>
