@@ -3,19 +3,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, ExternalLink, ListChecks } from 'lucide-react';
 import { createNeisJob, getNeisCandidates } from '@/lib/neis-job';
-import type { WorkspaceData } from '@/lib/domain';
+import type { Issue, WorkspaceData } from '@/lib/domain';
 import NeisSemesterJobPanel from './neis-semester-job-panel';
 
-export default function NeisJobPanel({ data, onChange, onReview, initialTask = 'behavior', initialStudentId }: {
+export default function NeisJobPanel({
+  data, onChange, onReview, onOpenClassroom, initialTask = 'behavior', initialStudentId,
+  semesterStudentId, semesterFocus, onSemesterStudent,
+}: {
   data: WorkspaceData;
-  onChange: (update: WorkspaceData | ((current: WorkspaceData) => WorkspaceData)) => boolean;
-  onReview: (id: string) => void;
+  onChange: (update: (current: WorkspaceData) => WorkspaceData) => void;
+  onReview: (id: string, issue?: Issue) => void;
+  onOpenClassroom: () => void;
   initialTask?: 'behavior' | 'semester';
   initialStudentId?: string;
+  semesterStudentId: string;
+  semesterFocus?: 'editor' | 'transfer';
+  onSemesterStudent: (id: string) => void;
 }) {
   const [task, setTask] = useState<'behavior' | 'semester'>(initialTask);
   const candidates = useMemo(() => getNeisCandidates(data), [data]);
-  const [selected, setSelected] = useState<string[]>(() => initialStudentId && candidates.some(item => item.student.id === initialStudentId && item.ready) ? [initialStudentId] : []);
+  const [selected, setSelected] = useState<string[]>(() => initialTask === 'behavior' && initialStudentId && candidates.some(item => item.student.id === initialStudentId && item.ready) ? [initialStudentId] : []);
   const [message, setMessage] = useState('');
   const selectionContext = JSON.stringify({ classroom: data.classroom, students: data.students });
   const previousSelectionContext = useRef(selectionContext);
@@ -24,6 +31,8 @@ export default function NeisJobPanel({ data, onChange, onReview, initialTask = '
     previousSelectionContext.current = selectionContext; setSelected([]); setMessage('');
   }, [selectionContext]);
   const ready = candidates.filter(item => item.ready);
+  const confirmed = candidates.filter(item => item.draft?.status === 'confirmed');
+  const needsCorrection = candidates.length - ready.length - confirmed.length;
   // Recompute against current records: edits must not leave stale eligible selections.
   const eligibleSelection = selected.filter(id => ready.some(item => item.student.id === id));
   function download() {
@@ -45,12 +54,35 @@ export default function NeisJobPanel({ data, onChange, onReview, initialTask = '
     <div className="notice notice-block"><strong>현재는 가상 자료로 검증하는 개발 버전입니다.</strong><p>실제 나이스 화면 호환성은 아직 검증하지 않았습니다. 화면 입력과 나이스 저장은 별개이며, 확장프로그램은 저장 버튼을 누르지 않습니다. 실제 학생 자료는 입력하지 마세요.</p></div>
     <section className="card classroom-card stack"><h2>1. 작업할 문장 선택</h2><p className="muted">검토 완료 또는 복사됨 상태이고 점검 문제가 없는 학생만 선택할 수 있습니다. 내려받은 후 문장·근거·학급을 수정했다면 새 작업 파일을 만드세요.</p>
       <p className="muted">작업 파일 대상: {data.classroom.year}학년도 · {data.classroom.grade}학년 · {data.classroom.room.trim() ? `${data.classroom.room.trim()}반` : '반 미입력'} · {data.classroom.semester}학기 · 행동특성 및 종합의견</p>
-      <div className="row between"><span className="badge"><ListChecks size={14} aria-hidden="true"/>준비된 학생 {ready.length}명 / 전체 {candidates.length}명</span><div className="row"><button type="button" className="button secondary" disabled={!ready.length} onClick={() => setSelected(ready.map(item => item.student.id))}>준비된 학생 모두 선택</button><button type="button" className="button secondary" disabled={!eligibleSelection.length} onClick={() => setSelected([])}>작업 선택 해제</button></div></div>
-      <div className="table-scroll"><table className="roster-table"><thead><tr><th scope="col">선택</th><th scope="col">학생</th><th scope="col">입력 준비</th><th scope="col">확인</th></tr></thead><tbody>{candidates.map(({ student, draft, ready: canSelect, reasons }) => <tr key={student.id}>
-        <td><input type="checkbox" aria-label={`${student.number}번 ${student.name} 작업 선택`} disabled={!canSelect} checked={canSelect && eligibleSelection.includes(student.id)} onChange={event => setSelected(current => event.target.checked ? [...current.filter(id => id !== student.id), student.id] : current.filter(id => id !== student.id))}/></td>
-        <td>{student.number}번 {student.name}</td><td>{canSelect ? `준비됨 · ${Array.from(draft!.content).length}자` : reasons.join(' / ')}</td>
-        <td><button className="text-button" onClick={() => onReview(student.id)} aria-label={`${student.name} 문장 확인`}>문장 확인</button></td>
-      </tr>)}</tbody></table></div>
+      <div className="row between"><span className="badge"><ListChecks size={14} aria-hidden="true"/>옮길 수 있음 {ready.length}명 · 수정·검토 필요 {needsCorrection}명 · 저장 직접 확인 {confirmed.length}명</span><div className="row"><button type="button" className="button secondary" disabled={!ready.length} onClick={() => setSelected(ready.map(item => item.student.id))}>준비된 학생 모두 선택</button><button type="button" className="button secondary" disabled={!eligibleSelection.length} onClick={() => setSelected([])}>작업 선택 해제</button></div></div>
+      <div className="table-scroll"><table className="roster-table transfer-table">
+        <thead><tr><th scope="col">선택</th><th scope="col">학생</th><th scope="col">입력 준비</th></tr></thead>
+        <tbody>{candidates.map(({ student, draft, ready: canSelect, issues, reasons, invalidName, multipleDrafts }) => {
+          const isConfirmed = draft?.status === 'confirmed';
+          const status = isConfirmed ? '나이스 저장 직접 확인' : canSelect ? '옮길 수 있음' : '수정·검토 필요';
+          // The row includes generic blockers (length, review state, roster name) and
+          // domain issues. Use the issue's kind to open its specific editor control.
+          const otherReasons = reasons.filter(reason => !issues.some(issue => issue.title === reason));
+          return <tr key={student.id}>
+            <td><input type="checkbox" aria-label={`${student.number}번 ${student.name} 작업 선택`} disabled={!canSelect} checked={canSelect && eligibleSelection.includes(student.id)} onChange={event => setSelected(current => event.target.checked ? [...current.filter(id => id !== student.id), student.id] : current.filter(id => id !== student.id))}/></td>
+            <th scope="row">{student.number}번 {student.name}</th>
+            <td>
+              <span className={`badge ${canSelect || isConfirmed ? 'status-confirmed' : 'status-draft'}`}>{status}</span>
+              {canSelect && draft && <span className="transfer-length">{Array.from(draft.content).length}자</span>}
+              {!canSelect && !isConfirmed && <ul className="transfer-checks">
+                {otherReasons.map(reason => <li key={reason}>{reason}</li>)}
+                {issues.map(issue => <li key={issue.id}>
+                  {multipleDrafts ? issue.title : <button type="button" className="text-button" onClick={() => onReview(student.id, issue)}
+                    aria-label={`${student.name}: ${issue.title} 수정`}>{issue.title} <span aria-hidden="true">→</span></button>}
+                </li>)}
+              </ul>}
+              {!canSelect && !isConfirmed && invalidName && <button type="button" className="text-button" onClick={onOpenClassroom}>학급·명부에서 이름 수정</button>}
+              {(!multipleDrafts || isConfirmed) && <button type="button" className="text-button transfer-edit" onClick={() => onReview(student.id)}
+                aria-label={`${student.name} ${canSelect || isConfirmed ? '문장 확인' : '문장 수정·검토'}`}>{canSelect || isConfirmed ? '문장 확인' : '문장 수정·검토'}</button>}
+            </td>
+          </tr>;
+        })}</tbody>
+      </table></div>
       <div><button className="button primary" disabled={!eligibleSelection.length} onClick={download}><Download size={16}/>선택한 {eligibleSelection.length}명 작업 파일</button></div>
       {message && <p role="status" className="notice">{message}</p>}
     </section>
@@ -64,6 +96,9 @@ export default function NeisJobPanel({ data, onChange, onReview, initialTask = '
       <p className="muted">‘일반 입력칸 후보’는 화면 구조의 점검 결과입니다. 실제 나이스 입력·저장 호환성 확인은 별도로 진행합니다. 인증서와 비밀번호는 직접 사용하며 공유하지 마세요.</p>
     </section>
     </div></div>
-    <div hidden={task !== 'semester'}><NeisSemesterJobPanel data={data} onChange={onChange}/></div>
+    <div hidden={task !== 'semester'}><NeisSemesterJobPanel data={data} onChange={onChange}
+      initialStudentId={initialTask === 'semester' ? initialStudentId ?? semesterStudentId : semesterStudentId}
+      initialFocus={initialTask === 'semester' ? semesterFocus : undefined}
+      onStudentChange={onSemesterStudent}/></div>
   </div>;
 }

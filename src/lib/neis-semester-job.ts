@@ -61,6 +61,13 @@ export function getSemesterPreparation(data: WorkspaceData): SemesterPreparation
   return data.semesterPreparation ?? { classroom: { ...data.classroom }, subject: '', entries: createSemesterEntries(data.students) };
 }
 
+export function getSemesterWork(data: WorkspaceData) {
+  const preparation = getSemesterPreparation(data);
+  const candidates = getSemesterCandidates(data.students, preparation, preparation.entries)
+    .sort((a, b) => a.student.number - b.student.number);
+  return { ...preparation, candidates };
+}
+
 export function updateSemesterWorkspaceContext(data: WorkspaceData, context: NeisSemesterContext): WorkspaceData {
   const task = getSemesterPreparation(data);
   return { ...data, semesterPreparation: { classroom: { ...context.classroom }, subject: context.subject,

@@ -11,6 +11,7 @@ import GettingStarted from './getting-started';
 import { COPYRIGHT } from '@/lib/site';
 import ClassroomPanel from './classroom-panel';
 import NeisJobPanel from './neis-job-panel';
+import { getSemesterWork } from '@/lib/neis-semester-job';
 import AiDraftControls from './ai-draft-controls';
 import { readWorkspace, saveWorkspace, workspaceStorageKey } from '@/lib/workspace-storage';
 import { OBSERVATION_CATEGORIES } from '@/lib/subjects';
@@ -78,6 +79,7 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
   const dataRef = useRef(data);
   const storageKey = workspaceStorageKey(userId);
   const resumeKey = `${storageKey}.review-student.v1`;
+  const semesterResumeKey = `${storageKey}.semester-student.v1`;
   const expectedRaw = useRef<string | null>(null);
   const writable = useRef(false);
   // Keep a synchronous current snapshot so asynchronous clipboard completions
@@ -100,6 +102,9 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
   const [view, setView] = useState<View>('dashboard');
   const [neisTask, setNeisTask] = useState<'behavior' | 'semester'>('behavior');
   const [neisStudentId, setNeisStudentId] = useState<string>();
+  const [semesterFocus, setSemesterFocus] = useState<'editor' | 'transfer'>();
+  const [semesterStudentId, setSemesterStudentId] = useState('');
+  const [returnToTransfer, setReturnToTransfer] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'warning' | 'info'>('all');
   const [selected, setSelected] = useState('');
@@ -141,6 +146,10 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
         setResumeId(lastStudent);
         setSelected(lastStudent);
       }
+      const lastSemesterStudent = localStorage.getItem(semesterResumeKey);
+      if (lastSemesterStudent && dataRef.current.students.some(student => student.id === lastSemesterStudent)) {
+        setSemesterStudentId(lastSemesterStudent);
+      }
     } catch { /* Reading this preference is optional. */ }
     setReady(true);
     const changedElsewhere = (event: StorageEvent) => {
@@ -151,7 +160,7 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
     };
     window.addEventListener('storage', changedElsewhere);
     return () => { writable.current = false; window.removeEventListener('storage', changedElsewhere); if (toastTimer.current) clearTimeout(toastTimer.current); };
-  }, [storageKey, resumeKey, userId]);
+  }, [storageKey, resumeKey, semesterResumeKey, userId]);
   const downloadRecovery = () => {
     if (recoveryRaw === null) return;
     const url = URL.createObjectURL(new Blob([recoveryRaw], { type: 'text/plain;charset=utf-8' }));
@@ -169,6 +178,9 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
     .sort((a, b) => a.number - b.number), [data]);
   const resumeStudent = pendingStudents.find(student => student.id === resumeId) ?? pendingStudents[0];
   const resumeTask = resumeStudent && reviewTask(issues.filter(issue => issue.studentId === resumeStudent.id));
+  const semesterWork = useMemo(() => view === 'dashboard' ? getSemesterWork(data) : null, [data, view]);
+  const semesterPending = semesterWork?.candidates.filter(candidate => !candidate.ready) ?? [];
+  const semesterResume = semesterPending.find(candidate => candidate.student.id === semesterStudentId) ?? semesterPending[0];
   const confirmed = data.students.filter(student => data.drafts.find(draft => draft.studentId === student.id)?.status === 'confirmed').length;
   const reviewed = data.students.filter(student => { const draft = data.drafts.find(item => item.studentId === student.id); return draft && draft.status !== 'draft'; }).length;
   const noObservation = data.students.filter(s => !data.observations.some(o => o.studentId === s.id));
@@ -185,6 +197,8 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
     if (target !== view && view === 'classroom' && classroomPending && !window.confirm('학급·명부에서 저장하지 않은 입력이 있습니다. 저장하지 않고 다른 메뉴로 이동할까요?')) return false;
     if (target !== view) setClassroomPending(false);
     setReviewJump(null);
+    setReturnToTransfer(false);
+    setSemesterFocus(undefined);
     setView(target); setMobileMenu(false); setQuery(''); setAllIssues(false);
     return true;
   };
@@ -212,8 +226,29 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
     else if (data.students.length) openTransfer('behavior');
     else navigate('classroom');
   };
-  const openTransfer = (task: 'behavior' | 'semester', studentId?: string) => {
-    setNeisTask(task); setNeisStudentId(studentId); navigate('neis-job');
+  const openTransfer = (task: 'behavior' | 'semester', studentId?: string, focus?: 'editor' | 'transfer') => {
+    if (!navigate('neis-job')) return;
+    setNeisTask(task);
+    setNeisStudentId(studentId);
+    setSemesterFocus(focus);
+  };
+  const rememberSemesterStudent = (id: string) => {
+    if (id === semesterStudentId) return;
+    setSemesterStudentId(id);
+    try {
+      if (id) localStorage.setItem(semesterResumeKey, id);
+      else localStorage.removeItem(semesterResumeKey);
+    } catch { /* The writing flow does not depend on saving this preference. */ }
+  };
+  const resumeSemester = () => {
+    if (!data.students.length) { navigate('classroom'); return; }
+    openTransfer('semester', semesterResume?.student.id, semesterResume ? 'editor' : 'transfer');
+  };
+  const correctBeforeTransfer = (id: string, issue?: Issue) => {
+    if (!navigate('workbench')) return;
+    const destination = issue ? issueDestination(issue) : { target: 'draft-content' };
+    selectReviewStudent(id, destination.check ? { ...destination, target: 'draft-content' } : destination);
+    setReturnToTransfer(true);
   };
   const startObservation = () => {
     if (!dataRef.current.students.length) { navigate('classroom'); notify('학급·명부에서 학생을 먼저 추가해 주세요.'); return; }
@@ -223,6 +258,7 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
     setData(next);
     setSelected(next.students[0]?.id ?? '');
     rememberReviewStudent('');
+    rememberSemesterStudent('');
   };
   const isCurrentWorkspace = (snapshot: WorkspaceData) => writable.current && dataRef.current === snapshot && localStorage.getItem(storageKey) === expectedRaw.current;
 
@@ -295,6 +331,18 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
                 <button className="button secondary" aria-describedby="resume-review-detail" onClick={resumeReview}>이어서 검토 <ChevronRight size={17}/></button>
               </> : <button className="button secondary" onClick={resumeReview}>{data.students.length ? '옮길 문장 확인' : '학생 명부 준비'} <ChevronRight size={17}/></button>}
             </div>
+            <div className="dashboard-action">
+              <h2>학기말 종합의견</h2>
+              <p id="semester-resume-detail">
+                {!data.students.length ? '학급·명부에서 학생을 먼저 추가하세요.' : semesterWork?.subject ? <>
+                  <span>{semesterWork.classroom.grade}학년 {semesterWork.classroom.room}반 · {semesterWork.classroom.semester}학기 · {semesterWork.subject}</span>
+                  <strong>{semesterPending.length ? `남은 학생 ${semesterPending.length}명${semesterResume ? ` · ${semesterResume.student.number}번 ${semesterResume.student.name}` : ''}` : '작업 파일 준비 가능'}</strong>
+                </> : '작업할 교과와 학급을 정해 시작하세요.'}
+              </p>
+              <button className="button secondary" aria-describedby="semester-resume-detail" onClick={resumeSemester}>
+                {!data.students.length ? '학기말 명부 준비' : semesterWork?.subject && !semesterPending.length ? '학기말 작업 파일 확인' : '학기말 종합의견 이어 쓰기'} <ChevronRight size={17}/>
+              </button>
+            </div>
           </section>
           <GettingStarted onRecord={startObservation} onPrepare={resumeReview} onBackup={() => navigate('settings')} onClassroom={() => navigate('classroom')} />
           <div className="stats-grid">
@@ -318,10 +366,12 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
         </>}
         {view === 'workbench' && <>
           <div className="page-heading"><div><div className="eyebrow">행동특성 및 종합의견 · 작성부터 검토까지</div><h1>문장 작성·검토</h1><p>근거를 확인하고 문장을 정리한 뒤, 나이스에 직접 옮겨 주세요.</p></div><span className="outlined-label"><ShieldCheck size={16}/>나이스 자동 전송 없음</span></div>
-          <div className="writing-routes"><span>어떤 문장을 준비하시나요?</span><strong>행동특성·종합의견 작성 중</strong><button className="button secondary" type="button" onClick={() => openTransfer('semester')}>학기말 종합의견 작성</button></div>
+          <div className="writing-routes"><span>어떤 문장을 준비하시나요?</span><strong>행동특성·종합의견 작성 중</strong><button className="button secondary" type="button" onClick={() => openTransfer('semester')}>학기말 종합의견 작성</button>{returnToTransfer && <button className="button secondary" type="button" onClick={() => openTransfer('behavior', selectedStudent?.id)}>나이스 작업 목록으로 돌아가기</button>}</div>
           <div className="workbench-layout"><aside className="card student-list"><div className="card-heading"><h2>우리 반 학생 <span className="count-label">{data.students.length}</span></h2></div>{data.students.map(s=>{const d=data.drafts.find(d=>d.studentId===s.id);return <button key={s.id} className={`student-list-item ${selectedStudent?.id===s.id?'selected':''}`} aria-current={selectedStudent?.id === s.id ? 'true' : undefined} onClick={() => selectReviewStudent(s.id)}><Avatar number={s.number}/><span><strong>{s.name}</strong><small>{d?STATUS[d.status]:'작성 전'}</small></span>{issues.some(i=>i.studentId===s.id)?<span className="attention-dot"/>:<Check size={16}/>}</button>;})}</aside>{!selectedStudent && <div className="card empty-state"><BookOpen size={30}/><h2>학생 명부를 먼저 준비해 주세요.</h2><p>학급·명부에서 번호와 이름을 추가하면 문장을 작성할 수 있습니다.</p><button className="button primary" onClick={() => navigate('classroom')}>학급·명부 열기</button></div>}{selectedStudent && <DraftEditor key={selectedStudent.id} isCurrentWorkspace={isCurrentWorkspace} data={data} studentId={selectedStudent.id} setData={setData} notify={notify} onRequestLogin={beginAuth} onTransfer={() => openTransfer('behavior', selectedStudent.id)} onAdd={startObservation} jump={reviewJump} nextStudent={nextReviewStudent} onNext={student => selectReviewStudent(student.id, { target: 'review-student-heading' })}/>}</div>
         </>}
-        {view === 'neis-job' && <NeisJobPanel data={data} onChange={update => { setData(update); return true; }} initialTask={neisTask} initialStudentId={neisStudentId} onReview={openStudent}/>}
+        {view === 'neis-job' && <NeisJobPanel data={data} onChange={setData} initialTask={neisTask}
+          initialStudentId={neisStudentId} semesterStudentId={semesterStudentId} semesterFocus={semesterFocus}
+          onSemesterStudent={rememberSemesterStudent} onReview={correctBeforeTransfer} onOpenClassroom={() => navigate('classroom')}/>}
         {view === 'classroom' && <ClassroomPanel data={data} onChange={setData} onToast={notify} onPendingChange={setClassroomPending}/>}
         {view === 'school' && <><div className="page-heading"><div><div className="eyebrow">나이스 교육정보 개방 포털</div><h1>학교 · 학사일정</h1><p>학교를 검색해 공개된 학사일정을 확인하세요.</p></div></div><SchoolPanel onToast={notify}/></>}
         {view === 'settings' && <><div className="page-heading"><div><div className="eyebrow">나의 업무 공간 관리</div><h1>설정 및 백업</h1><p>내 기록을 파일로 보관하거나, 로그인한 계정에 직접 저장하세요.</p></div></div><SettingsPanel data={data} onReplace={replaceData} onToast={notify} isCurrentWorkspace={isCurrentWorkspace} readOnly={storageBlocked} onViewObservations={() => navigate('observations')}/></>}

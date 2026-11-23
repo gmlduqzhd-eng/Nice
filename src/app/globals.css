@@ -87,7 +87,7 @@
 .dashboard-heading h1 { margin-bottom: 0; }
 .dashboard-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 12px;
 }
 .dashboard-action {
@@ -103,6 +103,17 @@
 .dashboard-action p { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .dashboard-action p span { display: block; color: #596b84; }
 .dashboard-action .button { margin-top: auto; min-height: 44px; }
+.transfer-table th[scope="row"] { text-align: left; font-weight: 650; color: var(--ink); white-space: normal; }
+.transfer-table td:last-child { white-space: normal; }
+.transfer-table td .badge { white-space: normal; }
+.transfer-length { margin-inline-start: 8px; color: #596b84; }
+.transfer-checks { margin: 6px 0; padding-inline-start: 18px; color: #596b84; }
+.transfer-checks .text-button, .transfer-edit { text-align: left; white-space: normal; }
+.semester-review-actions { flex-wrap: wrap; }
+.semester-review-actions > label { flex-wrap: wrap; }
+.semester-review-actions button, #semester-context-heading, .classroom-card select, .classroom-card textarea {
+  scroll-margin-top: 88px;
+}
 .review-editor { min-width: 0; }
 .review-editor-layout { display: grid; grid-template-columns: minmax(0, 1fr); }
 .review-evidence-column { min-width: 0; border-block: 1px solid var(--line); }
@@ -124,7 +135,7 @@
   .review-evidence-column { grid-area: evidence; border-block: 0; border-inline-start: 1px solid var(--line); }
   .review-evidence-column .editor-tabs, .review-evidence-column .evidence-panel { padding-inline: 16px; }
 }
-@media (max-width: 520px) {
+@media (max-width: 670px) {
   .dashboard-actions { grid-template-columns: minmax(0, 1fr); }
   .dashboard-action { padding: 14px 16px; }
   .dashboard-action + .dashboard-action { border-inline-start: 0; border-top: 1px solid var(--line); }

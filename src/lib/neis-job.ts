@@ -11,14 +11,16 @@ export function getNeisCandidates(data: WorkspaceData) {
     const drafts = data.drafts.filter(draft => draft.studentId === student.id);
     const draft = drafts[0];
     const reasons: string[] = [];
-    if (/[\u0000-\u001f]/.test(student.name)) reasons.push('학생 이름에 줄바꿈이나 제어문자가 있습니다.');
+    const invalidName = /[\u0000-\u001f]/.test(student.name);
+    if (invalidName) reasons.push('학생 이름에 줄바꿈이나 제어문자가 있습니다.');
     if (drafts.length !== 1) reasons.push(drafts.length ? '문장이 여러 개여서 입력 대상을 정할 수 없습니다.' : '작성한 문장이 없습니다.');
     if (draft?.status === 'draft') reasons.push('문장 검토가 필요합니다.');
     if (draft?.status === 'confirmed') reasons.push('이미 반영 확인한 문장입니다.');
     if (draft && draft.content.length > 6000) reasons.push('도우미는 6,000자 이하의 문장을 지원합니다.');
     if (draft && /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(draft.content)) reasons.push('문장에 지원하지 않는 제어문자가 있습니다.');
-    for (const issue of issues.filter(item => item.studentId === student.id)) reasons.push(issue.title);
-    return { student, draft, reasons: [...new Set(reasons)], ready: reasons.length === 0 && !!draft };
+    const studentIssues = issues.filter(item => item.studentId === student.id);
+    for (const issue of studentIssues) reasons.push(issue.title);
+    return { student, draft, issues: studentIssues, reasons: [...new Set(reasons)], invalidName, multipleDrafts: drafts.length > 1, ready: reasons.length === 0 && !!draft };
   });
 }
 
