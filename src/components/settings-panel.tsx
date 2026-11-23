@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Cloud, Download, HardDrive, LogOut, Mail, RotateCcw, Upload, UserRound } from "lucide-react";
-import { parseWorkspace, type WorkspaceData } from "@/lib/domain";
+import { countSemesterSentences, parseWorkspace, type WorkspaceData } from "@/lib/domain";
 import { createDemoWorkspace } from "@/lib/demo";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { googleAuthEnabled } from "@/lib/google-auth";
@@ -26,7 +26,7 @@ function savedTime(value: string) {
 
 function backupSummary(data: WorkspaceData) {
   const { year, grade, room, semester } = data.classroom;
-  const semesterDrafts = Object.values(data.semesterPreparation?.entries ?? {}).filter(entry => entry.content.trim()).length;
+  const semesterDrafts = countSemesterSentences(data);
   return `${year}학년도 ${grade}학년 ${room}반 ${semester}학기 · 학생 ${data.students.length}명 · 관찰 ${data.observations.length}건 · 작성 문장 ${data.drafts.length}건 · 학기말 문장 ${semesterDrafts}건`;
 }
 

@@ -147,7 +147,7 @@ test("전체 보관 파일 확인 후 빈 가상 학급으로 교체하고 같�
   const persisted = await page.evaluate(({ guestKey, accountKey, legacyKey }) => ({
     current: JSON.parse(localStorage.getItem(guestKey)!), account: localStorage.getItem(accountKey), legacy: localStorage.getItem(legacyKey),
   }), { guestKey, accountKey, legacyKey: LEGACY_STORAGE_KEY });
-  expect(persisted.current).toEqual({ version: 3, classroom: sample.classroom, students: [], observations: [], drafts: [] });
+  expect(persisted.current).toEqual({ version: 4, classroom: sample.classroom, students: [], observations: [], drafts: [] });
   expect(persisted.account).toBe(untouched); expect(persisted.legacy).toBe(legacy);
 
   await page.getByLabel("명부 붙여넣기", { exact: true }).fill("번호\t이름\n1\t가상새하나\n2\t가상새둘");

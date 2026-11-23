@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Download, Pencil, Plus, Trash2, Users } from "lucide-react";
-import { addStudents, editStudent, removeStudent, updateClassroom, type Classroom, type Student, type WorkspaceData } from "@/lib/domain";
+import { addStudents, countSemesterSentences, editStudent, removeStudent, updateClassroom, type Classroom, type Student, type WorkspaceData } from "@/lib/domain";
 import { exportRoster, parseRoster, prepareRosterImport, type RosterEntry } from "@/lib/roster";
 import { replaceWorkspaceFromSnapshot } from "@/lib/workspace-start";
 import WorkspaceStartPanel from "./workspace-start-panel";
@@ -166,9 +166,7 @@ export default function ClassroomPanel({ data, onChange, onToast, onPendingChang
       <p className="muted">관찰이나 작성 문장이 연결된 학생은 삭제하지 않습니다. 작성 문장 수에는 학기말에 적은 내용도 포함합니다. 이름 변경 시 문장은 원문을 유지하고 재검토 상태로 바뀝니다.</p>
       <div className="table-scroll"><table className="roster-table"><thead><tr><th>번호</th><th>이름</th><th>관찰 / 초안</th><th>관리</th></tr></thead><tbody>{data.students.map(student => {
         const observations = data.observations.filter(item => item.studentId === student.id).length;
-        const semesterEntries = data.semesterPreparation?.entries;
-        const semesterDraft = semesterEntries && Object.hasOwn(semesterEntries, student.id) && semesterEntries[student.id].content.trim() ? 1 : 0;
-        const drafts = data.drafts.filter(item => item.studentId === student.id).length + semesterDraft;
+        const drafts = data.drafts.filter(item => item.studentId === student.id).length + countSemesterSentences(data, student.id);
         return <tr key={student.id}><td>{student.number}</td><td>{student.name}</td><td>{observations} / {drafts}</td><td><div className="row">
           <button className="icon-button" aria-label={`${student.number}번 ${student.name} 정보 수정`} onClick={() => beginStudentEdit(student)}><Pencil size={16}/></button>
           <button className="icon-button" aria-label={`${student.number}번 ${student.name} 삭제`} disabled={!!observations || !!drafts} onClick={() => run(() => {

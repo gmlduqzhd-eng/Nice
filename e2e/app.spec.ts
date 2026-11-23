@@ -197,7 +197,7 @@ test("JSON 백업 다운로드와 확인을 거친 복원이 실제 기록을 �
   expect(filePath).not.toBeNull();
   const exported = await readFile(filePath!);
   const backup = JSON.parse(exported.toString("utf8"));
-  expect(backup.version).toBe(3);
+  expect(backup.version).toBe(4);
   expect(backup.students).toHaveLength(8);
   expect(backup.observations).toHaveLength(12);
 
@@ -340,7 +340,7 @@ test("손상된 브라우저 저장 원문을 복구 사본으로 내려받을 �
 });
 
 test("지원하지 않는 미래 기록 형식은 원문을 보존하고 예시 fallback의 자동 저장과 교체를 차단한다", async ({ page }) => {
-  const raw = JSON.stringify({ ...createDemoWorkspace(), version: 4,
+  const raw = JSON.stringify({ ...createDemoWorkspace(), version: 5,
     semesterPreparation: { classroom: createDemoWorkspace().classroom, subject: "체육",
       entries: { "student-7": { content: "보관해야 할 가상 미래 의견.", reviewedSnapshot: null } } } });
   const key = workspaceStorageKey(null);

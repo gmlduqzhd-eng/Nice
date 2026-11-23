@@ -10,7 +10,7 @@ test("v1 backups migrate without changing students, evidence, text or review sta
   const { classroom: _classroom, ...old } = data;
   const legacy = { ...old, version: 1 };
   const parsed = parseWorkspace(legacy)!;
-  assert.equal(parsed.version, 3);
+  assert.equal(parsed.version, 4);
   assert.deepEqual(parsed.students, data.students);
   assert.deepEqual(parsed.observations, data.observations);
   assert.deepEqual(parsed.drafts, data.drafts);
@@ -18,7 +18,7 @@ test("v1 backups migrate without changing students, evidence, text or review sta
   assert.equal(parseWorkspace({ ...data, classroom: null }), null);
 });
 
-test("v2 backups migrate to v3 without losing classroom, records or optional semester drafts", () => {
+test("v2 backups migrate to v4 without losing classroom, records or optional semester drafts", () => {
   const data = createDemoWorkspace();
   data.classroom = { year: 2027, grade: 5, room: "가상반", semester: 1 };
   data.semesterPreparation = { classroom: { ...data.classroom }, subject: "체육",
@@ -26,7 +26,7 @@ test("v2 backups migrate to v3 without losing classroom, records or optional sem
   const legacy = { ...data, version: 2 };
   const original = structuredClone(legacy);
   const migrated = parseWorkspace(legacy)!;
-  assert.equal(migrated.version, 3);
+  assert.equal(migrated.version, 4);
   assert.deepEqual(migrated, data);
   assert.deepEqual(legacy, original);
 });
@@ -110,7 +110,7 @@ test("stale writes and corrupt data never overwrite the stored original", () => 
 
 test("an unsupported future workspace keeps its complete raw storage for recovery", () => {
   const storage = store(), key = workspaceStorageKey(null);
-  const raw = JSON.stringify({ ...createDemoWorkspace(), version: 4,
+  const raw = JSON.stringify({ ...createDemoWorkspace(), version: 5,
     semesterPreparation: { classroom: createDemoWorkspace().classroom, subject: "체육",
       entries: { "student-7": { content: "보존할 가상 미래 문장.", reviewedSnapshot: null } } } });
   storage.setItem(key, raw);
@@ -118,6 +118,6 @@ test("an unsupported future workspace keeps its complete raw storage for recover
   assert.equal(loaded.recoveryRaw, raw);
   assert.equal(loaded.raw, raw);
   assert.equal(storage.getItem(key), raw);
-  assert.equal(loaded.data.version, 3);
+  assert.equal(loaded.data.version, 4);
   assert.equal(parseWorkspace(JSON.parse(raw)), null);
 });

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { createDemoWorkspace } from '../src/lib/demo';
+import { reviewSemesterWorkspaceEntry, selectSemesterSubject, updateSemesterWorkspaceContent } from '../src/lib/neis-semester-job';
 import { workspaceStorageKey } from '../src/lib/workspace-storage';
 
 const content = '가상 체육 관찰: 공을 주고받는 활동에서 규칙을 지키며 참여함.';
@@ -18,6 +19,102 @@ async function openSemester(page: Page) {
   await page.getByLabel('작업 교과', { exact: true }).selectOption('체육');
   await page.getByLabel('학기말 작성 학생').selectOption('student-7');
 }
+
+async function restoreWorkspace(page: Page, backup: Buffer) {
+  await page.getByRole('button', { name: '설정 및 백업', exact: true }).click();
+  page.once('dialog', async confirmation => {
+    expect(confirmation.message()).toContain('불러올 백업:');
+    await confirmation.accept();
+  });
+  await page.getByLabel('JSON 백업 파일 선택', { exact: true }).setInputFiles({
+    name: 'fictional-workspace-backup.json', mimeType: 'application/json', buffer: backup,
+  });
+  await expect(page.getByRole('region', { name: '불러온 백업' })).toBeVisible();
+}
+
+test('each subject retains its drafts and reviews across switches, reload and full backup restore', async ({ page }) => {
+  const music = '친구의 연주를 들으며 일정한 박을 유지함.';
+  const draft = page.getByRole('textbox', { name: opinion, exact: true });
+  const subject = page.getByLabel('작업 교과', { exact: true });
+  const reviewed = page.getByLabel(review, { exact: true });
+  const select = page.getByLabel(selection, { exact: true });
+  await openSemester(page);
+  await draft.fill(content);
+  await reviewed.check();
+  await select.check();
+  await subject.selectOption('음악');
+  await expect(draft).toHaveValue('');
+  await expect(reviewed).not.toBeChecked();
+  await expect(select).toBeDisabled();
+  await page.getByLabel('작업 학기', { exact: true }).selectOption('1');
+  await draft.fill(music);
+  await reviewed.check();
+  await subject.selectOption('체육');
+  await expect(draft).toHaveValue(content);
+  await expect(reviewed).toBeChecked();
+  await expect(select).not.toBeChecked();
+  await expect(page.getByLabel('작업 학기', { exact: true })).toHaveValue('2');
+
+  await page.reload();
+  await page.getByRole('button', { name: /학기말 종합의견 이어 쓰기/ }).click();
+  await page.getByLabel('학기말 작성 학생').selectOption('student-7');
+  await expect(subject).toHaveValue('체육');
+  await expect(reviewed).toBeChecked();
+  await subject.selectOption('음악');
+  await expect(draft).toHaveValue(music);
+  await expect(reviewed).toBeChecked();
+  await expect(page.getByLabel('작업 학기', { exact: true })).toHaveValue('1');
+  await page.getByRole('button', { name: '설정 및 백업', exact: true }).click();
+  const file = page.waitForEvent('download');
+  await page.getByRole('button', { name: '전체 기록 백업 파일 내려받기', exact: true }).click();
+  const backup = await readFile((await (await file).path())!);
+  expect(JSON.parse(backup.toString())).toMatchObject({
+    version: 4, semesterPreparation: { subject: '음악' },
+    semesterArchives: [{ subject: '체육' }],
+  });
+
+  await page.getByRole('button', { name: '나이스로 옮기기', exact: true }).click();
+  await page.getByRole('button', { name: '학기말 종합의견', exact: true }).click();
+  await draft.fill('다시 불러오기 전에 만든 가상 수정.');
+  await expect(reviewed).not.toBeChecked();
+  await restoreWorkspace(page, backup);
+  await expect(page.getByRole('region', { name: '불러온 백업' })).toContainText('학기말 문장 2건');
+  await page.getByRole('button', { name: '나이스로 옮기기', exact: true }).click();
+  await page.getByRole('button', { name: '학기말 종합의견', exact: true }).click();
+  await page.getByLabel('학기말 작성 학생').selectOption('student-7');
+  await expect(subject).toHaveValue('음악');
+  await expect(draft).toHaveValue(music);
+  await expect(reviewed).toBeChecked();
+  await subject.selectOption('체육');
+  await expect(draft).toHaveValue(content);
+  await expect(reviewed).toBeChecked();
+});
+
+test('a legacy v3 file restores its reviewed semester opinion and exports the original subject', async ({ page }) => {
+  const selected = selectSemesterSubject(createDemoWorkspace(), '체육');
+  const old = reviewSemesterWorkspaceEntry(updateSemesterWorkspaceContent(selected, 'student-7', content), 'student-7', true);
+  await page.goto('/');
+  await restoreWorkspace(page, Buffer.from(JSON.stringify({ ...old, version: 3 })));
+  await expect(page.getByRole('region', { name: '불러온 백업' })).toContainText('학기말 문장 1건');
+  await page.reload();
+  await page.getByRole('button', { name: '학기말 종합의견 이어 쓰기', exact: true }).click();
+  const subject = page.getByLabel('작업 교과', { exact: true });
+  await expect(subject).toHaveValue('체육');
+  await page.getByLabel('학기말 작성 학생').selectOption('student-7');
+  await expect(page.getByRole('textbox', { name: opinion, exact: true })).toHaveValue(content);
+  await expect(page.getByLabel(review, { exact: true })).toBeChecked();
+  await subject.selectOption('음악');
+  await expect(page.getByRole('textbox', { name: opinion, exact: true })).toHaveValue('');
+  await subject.selectOption('체육');
+  await page.getByLabel(selection, { exact: true }).check();
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: '선택한 1명 학기말 작업 파일', exact: true }).click();
+  const file = await downloaded;
+  expect(file.suggestedFilename()).toContain('체육');
+  expect(JSON.parse(await readFile((await file.path())!, 'utf8'))).toMatchObject({
+    version: 2, subject: '체육', rows: [{ number: 7, name: '백아람', content }],
+  });
+});
 
 test('separate semester review exports a grade 5 term 2 subject job and fills only the fictional selected row', async ({ page }) => {
   await openSemester(page);

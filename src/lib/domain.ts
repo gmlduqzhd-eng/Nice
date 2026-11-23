@@ -25,15 +25,16 @@ export interface Draft {
 }
 
 export interface WorkspaceData {
-  version: 3;
+  version: 4;
   classroom: Classroom;
   students: Student[];
   observations: Observation[];
   drafts: Draft[];
   semesterPreparation?: SemesterPreparation;
+  semesterArchives?: SemesterPreparation[];
 }
 
-/** One current semester task, independent of behavior drafts and NEIS entry. */
+/** One subject's semester task, independent of behavior drafts and NEIS entry. */
 export interface SemesterPreparationEntry {
   content: string;
   reviewedSnapshot: string | null;
@@ -43,6 +44,22 @@ export interface SemesterPreparation {
   classroom: Classroom;
   subject: string;
   entries: Record<string, SemesterPreparationEntry>;
+}
+
+export const MAX_SEMESTER_SUBJECTS = 64;
+export const semesterSubjectKey = (subject: string) => subject.normalize("NFC").trim();
+
+export function getSemesterTasks(data: WorkspaceData): SemesterPreparation[] {
+  return data.semesterPreparation ? [data.semesterPreparation, ...(data.semesterArchives ?? [])] : [];
+}
+
+export function countSemesterSentences(data: WorkspaceData, studentId?: string): number {
+  return getSemesterTasks(data).reduce((total, task) => {
+    if (studentId !== undefined) {
+      return total + Number(Object.hasOwn(task.entries, studentId) && !!task.entries[studentId].content.trim());
+    }
+    return total + Object.values(task.entries).filter(entry => entry.content.trim()).length;
+  }, 0);
 }
 
 export interface Classroom {
@@ -110,6 +127,8 @@ function parseSemesterPreparation(value: unknown, studentIds: Set<string>): Seme
       !isText(value.subject, 40) || /[\u0000-\u001f\u007f]/.test(value.subject)) return null;
   const entries = Object.entries(value.entries);
   if (entries.length > 500) return null;
+  const subject = semesterSubjectKey(value.subject);
+  if (subject.length > 40) return null;
   const clean: [string, SemesterPreparationEntry][] = [];
   for (const [id, entry] of entries) {
     if (!isId(id) || !studentIds.has(id) || !isRecord(entry) || !isText(entry.content, 6000) ||
@@ -117,20 +136,24 @@ function parseSemesterPreparation(value: unknown, studentIds: Set<string>): Seme
     clean.push([id, { content: entry.content, reviewedSnapshot: entry.reviewedSnapshot as string | null }]);
   }
   return { classroom: { year: Number(c.year), grade: Number(c.grade), room: c.room, semester: c.semester },
-    subject: value.subject, entries: Object.fromEntries(clean) };
+    subject, entries: Object.fromEntries(clean) };
 }
 
-function invalidateSemesterPreparation(data: WorkspaceData, removedId?: string): SemesterPreparation | undefined {
-  const task = data.semesterPreparation;
-  if (!task) return undefined;
-  return { ...task, entries: Object.fromEntries(Object.entries(task.entries)
-    .filter(([id]) => id !== removedId)
-    .map(([id, entry]) => [id, { content: entry.content, reviewedSnapshot: null }])) };
+function invalidateSemesterTasks(data: WorkspaceData, removedId?: string): Partial<WorkspaceData> {
+  const invalidate = (task: SemesterPreparation) => ({
+    ...task, entries: Object.fromEntries(Object.entries(task.entries)
+      .filter(([id]) => id !== removedId)
+      .map(([id, entry]) => [id, { content: entry.content, reviewedSnapshot: null }])),
+  });
+  return {
+    ...(data.semesterPreparation ? { semesterPreparation: invalidate(data.semesterPreparation) } : {}),
+    ...(data.semesterArchives ? { semesterArchives: data.semesterArchives.map(invalidate) } : {}),
+  };
 }
 
 /** Validate persisted/imported JSON and return a clean, independent object. */
 export function parseWorkspace(input: unknown): WorkspaceData | null {
-  if (!isRecord(input) || (input.version !== 1 && input.version !== 2 && input.version !== 3)) return null;
+  if (!isRecord(input) || (input.version !== 1 && input.version !== 2 && input.version !== 3 && input.version !== 4)) return null;
   const classroom = input.version === 1 ? DEFAULT_CLASSROOM : input.classroom;
   if (!validClassroom(classroom)) return null;
   const { students, observations, drafts } = input;
@@ -176,7 +199,7 @@ export function parseWorkspace(input: unknown): WorkspaceData | null {
     });
   }
   if (!unique(cleanDrafts.map((d) => d.id))) return null;
-  const result: WorkspaceData = { version: 3, classroom: { year: classroom.year, grade: classroom.grade, room: classroom.room.trim(), semester: classroom.semester }, students: cleanStudents, observations: cleanObservations, drafts: cleanDrafts };
+  const result: WorkspaceData = { version: 4, classroom: { year: classroom.year, grade: classroom.grade, room: classroom.room.trim(), semester: classroom.semester }, students: cleanStudents, observations: cleanObservations, drafts: cleanDrafts };
   const evidenceIndex = new Map(cleanObservations.map((observation) => [observation.id, observation.studentId]));
   // Draft-stage broken links remain inspectable. Completed stages must retain valid evidence.
   if (cleanDrafts.some((draft) => draft.status !== "draft" && !canReview(result, draft, evidenceIndex))) return null;
@@ -184,6 +207,23 @@ export function parseWorkspace(input: unknown): WorkspaceData | null {
     const task = parseSemesterPreparation(input.semesterPreparation, studentIds);
     if (!task) return null;
     result.semesterPreparation = task;
+  }
+  if (input.semesterArchives !== undefined) {
+    if (input.version !== 4 || !Array.isArray(input.semesterArchives) ||
+        input.semesterArchives.length >= MAX_SEMESTER_SUBJECTS || !result.semesterPreparation) return null;
+    const activeSubject = semesterSubjectKey(result.semesterPreparation.subject);
+    if (!activeSubject) return null;
+    const seen = new Set([activeSubject]);
+    const archived: SemesterPreparation[] = [];
+    for (const value of input.semesterArchives) {
+      const task = parseSemesterPreparation(value, studentIds);
+      if (!task) return null;
+      const subject = semesterSubjectKey(task.subject);
+      if (!subject || seen.has(subject)) return null;
+      seen.add(subject);
+      archived.push(task);
+    }
+    if (archived.length) result.semesterArchives = archived;
   }
   return result;
 }
@@ -195,7 +235,7 @@ export function updateClassroom(data: WorkspaceData, classroom: Classroom): Work
 
 export function addStudents(data: WorkspaceData, students: Student[]): WorkspaceData {
   if (!students.length) throw new Error("추가할 학생을 입력해 주세요.");
-  const next = { ...data, ...(data.semesterPreparation ? { semesterPreparation: invalidateSemesterPreparation(data) } : {}),
+  const next = { ...data, ...invalidateSemesterTasks(data),
     students: [...data.students, ...students.map(student => ({ ...student, name: student.name.trim() }))].sort((a, b) => a.number - b.number) };
   const parsed = parseWorkspace(next);
   if (!parsed) throw new Error("번호(1~999) 중복, 이름 또는 최대 인원(500명)을 확인해 주세요.");
@@ -210,8 +250,7 @@ export function editStudent(data: WorkspaceData, id: string, number: number, nam
   const next = { ...data,
     students: data.students.map(item => item.id === id ? { ...item, number, name: trimmed } : item).sort((a, b) => a.number - b.number),
     drafts: student.name === trimmed ? data.drafts : data.drafts.map(draft => ({ ...draft, status: "draft" as const, updatedAt: new Date().toISOString() })),
-    ...(data.semesterPreparation && (student.name !== trimmed || student.number !== number)
-      ? { semesterPreparation: invalidateSemesterPreparation(data) } : {}),
+    ...(student.name !== trimmed || student.number !== number ? invalidateSemesterTasks(data) : {}),
   };
   const parsed = parseWorkspace(next);
   if (!parsed) throw new Error("번호(1~999) 중복과 이름을 확인해 주세요.");
@@ -221,11 +260,11 @@ export function editStudent(data: WorkspaceData, id: string, number: number, nam
 export function removeStudent(data: WorkspaceData, id: string): WorkspaceData {
   if (!data.students.some(student => student.id === id)) throw new Error("학생을 찾을 수 없습니다.");
   if (data.observations.some(item => item.studentId === id) || data.drafts.some(item => item.studentId === id) ||
-      (data.semesterPreparation && Object.hasOwn(data.semesterPreparation.entries, id) && data.semesterPreparation.entries[id].content.trim())) {
+      countSemesterSentences(data, id) > 0) {
     throw new Error("관찰 기록이나 행특·학기말 초안이 연결된 학생은 삭제할 수 없습니다. 기존 기록을 먼저 확인해 주세요.");
   }
   return { ...data, students: data.students.filter(student => student.id !== id),
-    ...(data.semesterPreparation ? { semesterPreparation: invalidateSemesterPreparation(data, id) } : {}) };
+    ...invalidateSemesterTasks(data, id) };
 }
 
 const normalizeContent = (content: string) => content.normalize("NFC").trim().replace(/\s+/gu, " ");

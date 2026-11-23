@@ -5,7 +5,7 @@ import { Download } from 'lucide-react';
 import type { Classroom, WorkspaceData } from '@/lib/domain';
 import {
   createNeisSemesterJob, getSemesterWork, getSemesterTaskError,
-  reviewSemesterWorkspaceEntry, updateSemesterWorkspaceContent, updateSemesterWorkspaceContext,
+  reviewSemesterWorkspaceEntry, selectSemesterSubject, updateSemesterWorkspaceClassroom, updateSemesterWorkspaceContent,
 } from '@/lib/neis-semester-job';
 import { ELEMENTARY_SUBJECTS } from '@/lib/subjects';
 
@@ -17,6 +17,10 @@ export default function NeisSemesterJobPanel({ data, onChange, initialStudentId,
   onStudentChange: (id: string) => void;
 }) {
   const { classroom, subject, entries, candidates } = useMemo(() => getSemesterWork(data), [data]);
+  const archivedSubjects = new Set(data.semesterArchives?.map(task => task.subject));
+  const subjects = new Set<string>(ELEMENTARY_SUBJECTS);
+  if (subject) subjects.add(subject);
+  for (const archivedSubject of archivedSubjects) subjects.add(archivedSubject);
   const [activeId, setActiveId] = useState(initialStudentId);
   const [selected, setSelected] = useState<string[]>([]);
   const [message, setMessage] = useState('');
@@ -63,9 +67,18 @@ export default function NeisSemesterJobPanel({ data, onChange, initialStudentId,
     }
   }
 
-  function changeContext(nextClassroom: Classroom, nextSubject = subject) {
-    if (save(current => updateSemesterWorkspaceContext(current, { classroom: nextClassroom, subject: nextSubject }))) {
-      setSelected([]); setMessage('작업 학급 또는 교과가 바뀌었습니다. 문장을 다시 검토해 주세요.');
+  function changeClassroom(nextClassroom: Classroom) {
+    if (save(current => updateSemesterWorkspaceClassroom(current, nextClassroom))) {
+      setSelected([]);
+      setMessage('이 교과의 작업 학급 또는 학기가 바뀌었습니다. 문장을 다시 검토해 주세요.');
+    }
+  }
+  function changeSubject(nextSubject: string) {
+    if (save(current => selectSemesterSubject(current, nextSubject))) {
+      setSelected([]);
+      setMessage(archivedSubjects.has(nextSubject)
+        ? `${nextSubject}에 보관한 초안과 검토 상태를 열었습니다.`
+        : `${nextSubject} 작업을 열었습니다.`);
     }
   }
   function changeContent(content: string) {
@@ -96,7 +109,8 @@ export default function NeisSemesterJobPanel({ data, onChange, initialStudentId,
       const job = createNeisSemesterJob(data.students, { classroom, subject }, entries, eligibleSelection);
       const url = URL.createObjectURL(new Blob([JSON.stringify(job, null, 2)], { type: 'application/json;charset=utf-8' }));
       const anchor = document.createElement('a'); anchor.href = url;
-      anchor.download = `담임노트_학기말_${job.classroom.year}_${job.classroom.grade}학년_${job.classroom.semester}학기_${job.rows.length}명.json`;
+      const fileSubject = ELEMENTARY_SUBJECTS.find(item => item === job.subject) ?? '기타교과';
+      anchor.download = `담임노트_학기말_${fileSubject}_${job.classroom.year}_${job.classroom.grade}학년_${job.classroom.semester}학기_${job.rows.length}명.json`;
       document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
       setDownloadMessage(`${job.subject} 학기말 종합의견 ${job.rows.length}명의 작업 파일을 내려받았습니다. 나이스 입력·저장은 별도로 확인하세요.`);
     } catch (error) { setDownloadMessage(error instanceof Error ? error.message : '학기말 작업 파일을 만들지 못했습니다.'); }
@@ -104,21 +118,24 @@ export default function NeisSemesterJobPanel({ data, onChange, initialStudentId,
 
   return <div className="stack">
     <div className="page-heading"><div><div className="eyebrow">교과별 학기말 종합의견 · 초안 보관</div><h1>학기말 종합의견 준비</h1><p>작업할 교과와 학급을 확인하고 학생별 의견을 직접 작성·검토합니다.</p></div></div>
-    <div className="notice notice-block"><strong>미검토 문장도 이 브라우저에 자동 보관합니다.</strong><p>다른 메뉴로 이동하거나 새로고침해도 이어 쓸 수 있습니다. 전체 기록 백업에는 학기말 초안도 포함됩니다. 다른 PC에서 이어 쓰려면 내 계정에 직접 보관하거나 백업 파일을 옮기세요. 현재 명부의 가상 학생만 사용하세요.</p></div>
+    <div className="notice notice-block"><strong>교과마다 초안과 검토 상태를 자동 보관합니다.</strong><p>교과를 다시 선택하면 이어 쓸 수 있습니다. 전체 기록 백업에는 모든 교과의 문장이 포함됩니다. 현재 명부의 가상 학생만 사용하세요.</p></div>
     <section className="card classroom-card stack" aria-labelledby="semester-context-heading">
       <h2 id="semester-context-heading" ref={contextHeading} tabIndex={-1}>1. 작업할 학급과 교과</h2>
-      <p className="muted">아래 정보는 이 작업 파일의 대상입니다. 현재 관찰 기록의 학급 표시를 바꾸지 않습니다.</p>
+      <label className="field">작업 교과<select ref={subjectInput} aria-label="작업 교과" value={subject} onChange={event => changeSubject(event.target.value)}>
+        <option value="" disabled>교과를 선택하세요</option>
+        {[...subjects].map(item => <option key={item} value={item}>{item}{archivedSubjects.has(item) ? ' · 보관됨' : ''}</option>)}
+      </select></label>
+      <p className="muted">아래 학급과 학기는 선택한 교과의 작업 파일에 사용됩니다.</p>
       <div className="classroom-fields">
-        <label className="field">작업 학년도<input type="number" min={2000} max={2100} step={1} value={classroom.year} onChange={event => changeContext({ ...classroom, year: Number(event.target.value) })}/></label>
-        <label className="field">작업 학년<select aria-label="작업 학년" value={classroom.grade} onChange={event => changeContext({ ...classroom, grade: Number(event.target.value) })}>{[1, 2, 3, 4, 5, 6].map(grade => <option key={grade} value={grade}>{grade}학년</option>)}</select></label>
-        <label className="field">작업 반<input value={classroom.room} maxLength={20} onChange={event => changeContext({ ...classroom, room: event.target.value })}/></label>
-        <label className="field">작업 학기<select aria-label="작업 학기" value={classroom.semester} onChange={event => changeContext({ ...classroom, semester: Number(event.target.value) as 1 | 2 })}><option value={1}>1학기</option><option value={2}>2학기</option></select></label>
+        <label className="field">작업 학년도<input type="number" min={2000} max={2100} step={1} value={classroom.year} onChange={event => changeClassroom({ ...classroom, year: Number(event.target.value) })}/></label>
+        <label className="field">작업 학년<select aria-label="작업 학년" value={classroom.grade} onChange={event => changeClassroom({ ...classroom, grade: Number(event.target.value) })}>{[1, 2, 3, 4, 5, 6].map(grade => <option key={grade} value={grade}>{grade}학년</option>)}</select></label>
+        <label className="field">작업 반<input value={classroom.room} maxLength={20} onChange={event => changeClassroom({ ...classroom, room: event.target.value })}/></label>
+        <label className="field">작업 학기<select aria-label="작업 학기" value={classroom.semester} onChange={event => changeClassroom({ ...classroom, semester: Number(event.target.value) as 1 | 2 })}><option value={1}>1학기</option><option value={2}>2학기</option></select></label>
       </div>
-      <label className="field">작업 교과<select ref={subjectInput} aria-label="작업 교과" value={subject} onChange={event => changeContext(classroom, event.target.value)}><option value="">교과를 선택하세요</option>{subject && !ELEMENTARY_SUBJECTS.some(item => item === subject) && <option value={subject}>{subject} (기존 입력)</option>}{ELEMENTARY_SUBJECTS.map(item => <option key={item} value={item}>{item}</option>)}</select></label>
       <div className="notice notice-block"><strong className="section-heading">{classroom.year}학년도 · {classroom.grade}학년 · {classroom.room.trim() ? `${classroom.room.trim()}반` : '반 미입력'} · {classroom.semester}학기 · {subject.trim() || '교과 미입력'}</strong><p>학기말 종합의견 작업 대상이 위 학급·학기·교과와 정확히 같은지 확인하세요.</p></div>
       {contextError && <p className="error-text">{contextError}</p>}
     </section>
-    <section className="card classroom-card stack"><h2>2. 학생별 문장 작성과 교사 검토</h2><p className="muted">행동특성 문장이나 검토 상태를 가져오지 않습니다. 가상 자료로 학기말 의견을 직접 작성하세요. 교과·학급·명부·문장이 바뀌면 검토를 다시 해야 합니다.</p>
+    <section className="card classroom-card stack"><h2>2. 학생별 문장 작성과 교사 검토</h2><p className="muted">이 교과의 작업 학급이나 문장을 수정하면 다시 검토해야 합니다. 학생 명부가 바뀌면 모든 교과를 다시 검토해 주세요.</p>
       {!active ? <p>현재 명부에 학생이 없습니다.</p> : <>
         <label className="field">학기말 작성 학생<select aria-label="학기말 작성 학생" value={active.student.id} onChange={event => selectStudent(event.target.value)}>{candidates.map(({ student }) => <option key={student.id} value={student.id}>{student.number}번 {student.name}</option>)}</select></label>
         <label className="field">{active.student.number}번 {active.student.name} 학기말 종합의견<textarea ref={editor} rows={6} maxLength={6000} value={active.entry.content} onChange={event => changeContent(event.target.value)} placeholder="이 교과에서 관찰한 내용을 바탕으로 직접 작성하세요."/></label>

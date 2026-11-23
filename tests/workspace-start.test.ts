@@ -10,7 +10,7 @@ test("an empty start keeps the classroom and creates independent empty records",
   const original = structuredClone(current);
 
   const next = createWorkspaceStart(current, "empty");
-  assert.deepEqual(next, { version: 3, classroom: current.classroom, students: [], observations: [], drafts: [] });
+  assert.deepEqual(next, { version: 4, classroom: current.classroom, students: [], observations: [], drafts: [] });
   assert.notEqual(next, current);
   assert.notEqual(next.classroom, current.classroom);
   assert.notEqual(next.students, current.students);
@@ -24,7 +24,7 @@ test("an empty start keeps the classroom and creates independent empty records",
   next.observations.push({ ...current.observations[0] });
   next.drafts.push({ ...current.drafts[0], evidenceIds: [] });
   assert.deepEqual(current, original);
-  assert.deepEqual(another, { version: 3, classroom: original.classroom, students: [], observations: [], drafts: [] });
+  assert.deepEqual(another, { version: 4, classroom: original.classroom, students: [], observations: [], drafts: [] });
 });
 
 test("example starts are fresh demo workspaces independent of current records and one another", () => {
@@ -57,7 +57,7 @@ test("example starts are fresh demo workspaces independent of current records an
 test("record detection protects any nonempty collection, including standalone observations or drafts", () => {
   const sample = createDemoWorkspace();
   const empty: WorkspaceData = {
-    version: 3,
+    version: 4,
     classroom: { year: 2027, grade: 5, room: "가상반", semester: 1 },
     students: [],
     observations: [],

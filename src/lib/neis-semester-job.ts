@@ -1,4 +1,4 @@
-import { getIssues, type Classroom, type SemesterPreparation, type SemesterPreparationEntry, type Student, type WorkspaceData } from './domain';
+import { getIssues, MAX_SEMESTER_SUBJECTS, semesterSubjectKey, type Classroom, type SemesterPreparation, type SemesterPreparationEntry, type Student, type WorkspaceData } from './domain';
 import { JOB_MAX_BYTES, type NeisJobRow } from './neis-job';
 
 export type NeisSemesterContext = { classroom: Classroom; subject: string };
@@ -68,9 +68,30 @@ export function getSemesterWork(data: WorkspaceData) {
   return { ...preparation, candidates };
 }
 
-export function updateSemesterWorkspaceContext(data: WorkspaceData, context: NeisSemesterContext): WorkspaceData {
+export function selectSemesterSubject(data: WorkspaceData, subject: string): WorkspaceData {
+  const target = semesterSubjectKey(subject);
+  const active = getSemesterPreparation(data);
+  if (target === semesterSubjectKey(active.subject)) return data;
+  if (!target || target.length > 40 || forbiddenSingleLineControls.test(subject)) {
+    throw new Error('작업할 교과를 다시 선택해 주세요.');
+  }
+  const { semesterArchives: archived = [], ...workspace } = data;
+  const stored = archived.find(task => semesterSubjectKey(task.subject) === target);
+  const nextArchives = archived.filter(task => task !== stored);
+  if (active.subject) nextArchives.push(active);
+  if (nextArchives.length >= MAX_SEMESTER_SUBJECTS) throw new Error('보관할 수 있는 교과 수를 넘었습니다.');
+  // An unnamed legacy draft belongs to the first subject the teacher chooses.
+  const next = stored ?? {
+    classroom: { ...active.classroom },
+    subject: target,
+    entries: active.subject ? {} : invalidateSemesterReviews(active.entries),
+  };
+  return { ...workspace, semesterPreparation: next, ...(nextArchives.length ? { semesterArchives: nextArchives } : {}) };
+}
+
+export function updateSemesterWorkspaceClassroom(data: WorkspaceData, classroom: Classroom): WorkspaceData {
   const task = getSemesterPreparation(data);
-  return { ...data, semesterPreparation: { classroom: { ...context.classroom }, subject: context.subject,
+  return { ...data, semesterPreparation: { ...task, classroom: { ...classroom },
     entries: invalidateSemesterReviews(task.entries) } };
 }
 
@@ -105,7 +126,7 @@ export function getSemesterTaskError(students: Student[], context: NeisSemesterC
 export function getSemesterCandidates(students: Student[], context: NeisSemesterContext, entries: NeisSemesterEntries) {
   // Reuse the existing empty/duplicate/other-name rules without importing any
   // behavior-opinion drafts, review state or observation-evidence requirements.
-  const issues = getIssues({ version: 3, classroom: context.classroom, students, observations: [],
+  const issues = getIssues({ version: 4, classroom: context.classroom, students, observations: [],
     drafts: students.map(student => ({ id: student.id, studentId: student.id, content: semesterEntry(entries, student.id).content,
       evidenceIds: [], status: 'draft' as const, updatedAt: '2000-01-01T00:00:00.000Z' })) });
   const contextError = getSemesterTaskError(students, context);

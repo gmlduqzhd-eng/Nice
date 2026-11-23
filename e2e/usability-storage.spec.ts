@@ -82,6 +82,11 @@ test("로그인 전 저장 위치와 체험 기록 이전을 안내하고 전체
 test("계정 백업 시각과 일치 여부를 보여 주고 새 편집 뒤에는 다시 저장하도록 안내한다", async ({ page, baseURL }) => {
   const mock = await mockSupabase(page, baseURL!);
   const workspace = semesterWorkspace();
+  workspace.semesterArchives = [{
+    classroom: { ...workspace.classroom },
+    subject: "음악",
+    entries: { "student-1": { content: "가상 음악 수업에서 노래의 박을 맞춤.", reviewedSnapshot: null } },
+  }];
   await seedWorkspace(page, TEST_USER_ID, workspace);
   await mock.completeMagicLink();
   await openSettings(page);
@@ -89,7 +94,7 @@ test("계정 백업 시각과 일치 여부를 보여 주고 새 편집 뒤에�
   await expect(backupState).toContainText("저장 또는 불러오기를 눌러 확인하세요");
   expect(mock.cloudRequests()).toHaveLength(0);
   page.once("dialog", async dialog => {
-    expect(dialog.message()).toContain("학기말 문장 2건");
+    expect(dialog.message()).toContain("학기말 문장 3건");
     await dialog.accept();
   });
   await page.getByRole("button", { name: "클라우드에 저장", exact: true }).click();

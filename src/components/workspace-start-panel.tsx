@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Download } from "lucide-react";
-import type { WorkspaceData } from "@/lib/domain";
+import { countSemesterSentences, getSemesterTasks, type WorkspaceData } from "@/lib/domain";
 import { JSON_BACKUP_SIZE_LABEL, JsonBackupSizeError, serializeJsonBackup } from "@/lib/json-backup";
 import { createWorkspaceStart, hasWorkspaceRecords, type WorkspaceStartMode } from "@/lib/workspace-start";
 
@@ -21,10 +21,6 @@ type PendingStart = {
 function classroomLabel(data: Pick<WorkspaceData, "classroom">) {
   const { year, grade, room, semester } = data.classroom;
   return `${year}학년도 ${grade}학년 ${room}반 ${semester}학기`;
-}
-
-function semesterSentenceCount(data: WorkspaceData) {
-  return Object.values(data.semesterPreparation?.entries ?? {}).filter(entry => entry.content.trim()).length;
 }
 
 export default function WorkspaceStartPanel({ data, onReplace }: Props) {
@@ -72,10 +68,10 @@ export default function WorkspaceStartPanel({ data, onReplace }: Props) {
       <div className="table-scroll"><table className="roster-table" aria-label="학급 교체 전후 확인">
         <thead><tr><th>구분</th><th>학급</th><th>학생</th><th>관찰</th><th>행동특성 문장</th><th>학기말 문장</th></tr></thead>
         <tbody>{[{ label: "현재 기록", workspace: pending.snapshot }, { label: "교체할 기록", workspace: pending.replacement }].map(({ label, workspace }) =>
-          <tr key={label}><th scope="row">{label}</th><td>{classroomLabel(workspace)}</td><td>{workspace.students.length}명</td><td>{workspace.observations.length}건</td><td>{workspace.drafts.length}건</td><td>{semesterSentenceCount(workspace)}건</td></tr>
+          <tr key={label}><th scope="row">{label}</th><td>{classroomLabel(workspace)}</td><td>{workspace.students.length}명</td><td>{workspace.observations.length}건</td><td>{workspace.drafts.length}건</td><td>{countSemesterSentences(workspace)}건</td></tr>
         )}</tbody>
       </table></div>
-      {pending.snapshot.semesterPreparation && <p className="muted">현재 학기말 작업: {classroomLabel(pending.snapshot.semesterPreparation)} · {pending.snapshot.semesterPreparation.subject || "교과 미입력"} · 문장 {semesterSentenceCount(pending.snapshot)}건. 학급 교체 시 이 작성 자료도 비워집니다.</p>}
+      {pending.snapshot.semesterPreparation && <p className="muted">학급을 교체하면 {getSemesterTasks(pending.snapshot).length}개 교과의 학기말 작성 자료도 함께 교체됩니다.</p>}
       {needsBackup ? <>
         <p><strong>1. 현재 기록을 파일로 보관하세요.</strong> 다운로드한 파일이 저장되어 있는지 확인한 뒤 다음 단계로 진행합니다.</p>
         <div><button type="button" className="button secondary" onClick={downloadBackup} disabled={changed}><Download size={16}/>교체 전 보관 파일 내려받기</button></div>

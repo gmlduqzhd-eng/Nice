@@ -199,6 +199,7 @@ function TeacherWorkspace({ userId }: { userId: string | null }) {
     setReviewJump(null);
     setReturnToTransfer(false);
     setSemesterFocus(undefined);
+    setNeisStudentId(undefined);
     setView(target); setMobileMenu(false); setQuery(''); setAllIssues(false);
     return true;
   };

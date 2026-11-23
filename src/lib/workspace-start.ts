@@ -5,7 +5,7 @@ export type WorkspaceStartMode = "empty" | "example";
 
 export function createWorkspaceStart(current: WorkspaceData, mode: WorkspaceStartMode): WorkspaceData {
   if (mode === "example") return createDemoWorkspace();
-  return { version: 3, classroom: { ...current.classroom }, students: [], observations: [], drafts: [] };
+  return { version: 4, classroom: { ...current.classroom }, students: [], observations: [], drafts: [] };
 }
 
 export function hasWorkspaceRecords(current: WorkspaceData): boolean {
